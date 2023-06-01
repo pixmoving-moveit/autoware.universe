@@ -5,13 +5,13 @@
   <arg name="csv_path_brake_map" default="$(find-pkg-share raw_vehicle_cmd_converter)/data/default/brake_map.csv"/>
   <arg name="csv_path_steer_map" default="$(find-pkg-share raw_vehicle_cmd_converter)/data/default/steer_map.csv"/>
 
-  <arg name="max_throttle" default="0.4"/>
-  <arg name="max_brake" default="0.8"/>
+  <arg name="max_throttle" default="1.0"/>
+  <arg name="max_brake" default="1.0"/>
   <arg name="max_steer" default="10.0"/>
   <arg name="min_steer" default="-10.0"/>
   <arg name="convert_accel_cmd" default="true"/>
   <arg name="convert_brake_cmd" default="true"/>
-  <arg name="convert_steer_cmd" default="true"/>
+  <arg name="convert_steer_cmd" default="false"/>
   <arg name="input_control_cmd" default="/control/command/control_cmd"/>
   <arg name="input_odometry" default="/localization/kinematic_state"/>
   <arg name="input_steering" default="/vehicle/status/steering_status"/>

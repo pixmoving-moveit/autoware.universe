@@ -472,7 +472,7 @@ def launch_setup(context, *args, **kwargs):
         )
     )
 
-    relay_topic = "single_frame/filtered/pointcloud"
+    relay_topic = "/perception/obstacle_segmentation/single_frame/filtered/pointcloud"
     if pipeline.use_single_frame_filter:
         components.extend(
             pipeline.create_single_frame_outlier_filter_components(
