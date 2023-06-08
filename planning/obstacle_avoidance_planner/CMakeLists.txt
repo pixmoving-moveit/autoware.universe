@@ -30,6 +30,7 @@ ament_auto_add_library(obstacle_avoidance_planner SHARED
   # vehicle model
   src/vehicle_model/vehicle_model_interface.cpp
   src/vehicle_model/vehicle_model_bicycle_kinematics.cpp
+  src/vehicle_model/vehicle_model_four_wheel_steering_kinematics.cpp
   # utils
   src/utils/trajectory_utils.cpp
   src/utils/geometry_utils.cpp

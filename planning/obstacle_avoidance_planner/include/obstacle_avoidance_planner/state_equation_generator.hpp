@@ -17,6 +17,7 @@
 
 #include "obstacle_avoidance_planner/common_structs.hpp"
 #include "obstacle_avoidance_planner/vehicle_model/vehicle_model_bicycle_kinematics.hpp"
+#include "obstacle_avoidance_planner/vehicle_model/vehicle_model_four_wheel_steering_kinematics.hpp"
 #include "obstacle_avoidance_planner/vehicle_model/vehicle_model_interface.hpp"
 
 #include <memory>
@@ -42,6 +43,18 @@ public:
   : vehicle_model_ptr_(std::make_unique<KinematicsBicycleModel>(wheel_base, max_steer_rad)),
     time_keeper_ptr_(time_keeper_ptr)
   {
+  }
+
+  StateEquationGenerator(const double wheel_base, const double max_steer_rad, 
+    const std::string vehicle_model_type,
+    const std::shared_ptr<TimeKeeper> time_keeper_ptr)
+  {
+    if (vehicle_model_type == "four_wheel_steering"){
+      vehicle_model_ptr_ = std::make_unique<KinematicsFourWheelSteeringModel>(wheel_base, max_steer_rad);
+    } else if (vehicle_model_type == "bicycle"){
+      vehicle_model_ptr_ = std::make_unique<KinematicsBicycleModel>(wheel_base, max_steer_rad);
+    }
+    time_keeper_ptr_ = time_keeper_ptr;
   }
 
   int getDimX() const { return vehicle_model_ptr_->getDimX(); }

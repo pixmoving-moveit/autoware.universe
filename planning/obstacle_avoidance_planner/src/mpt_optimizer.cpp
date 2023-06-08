@@ -199,6 +199,7 @@ MPTOptimizer::MPTParam::MPTParam(
   {  // common
     num_points = node->declare_parameter<int>("mpt.common.num_points");
     delta_arc_length = node->declare_parameter<double>("mpt.common.delta_arc_length");
+    vehicle_model_type = node->declare_parameter<std::string>("mpt.common.vehicle_model_type");
   }
 
   // kinematics
@@ -311,6 +312,7 @@ void MPTOptimizer::MPTParam::onParam(const std::vector<rclcpp::Parameter> & para
   // common
   updateParam<int>(parameters, "mpt.common.num_points", num_points);
   updateParam<double>(parameters, "mpt.common.delta_arc_length", delta_arc_length);
+  updateParam<std::string>(parameters, "mpt.common.vehicle_model_type", vehicle_model_type);
 
   // kinematics
   updateParam<double>(
@@ -423,7 +425,7 @@ MPTOptimizer::MPTOptimizer(
 
   // state equation generator
   state_equation_generator_ =
-    StateEquationGenerator(vehicle_info_.wheel_base_m, mpt_param_.max_steer_rad, time_keeper_ptr_);
+    StateEquationGenerator(vehicle_info_.wheel_base_m, mpt_param_.max_steer_rad, mpt_param_.vehicle_model_type, time_keeper_ptr_);
 
   // osqp solver
   osqp_solver_ptr_ = std::make_unique<autoware::common::osqp::OSQPInterface>(osqp_epsilon_);

@@ -154,6 +154,7 @@ private:
     // common
     double delta_arc_length;
     int num_points;
+    std::string vehicle_model_type;
 
     // kinematics
     double optimization_center_offset;
