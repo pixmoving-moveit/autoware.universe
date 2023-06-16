@@ -72,6 +72,48 @@ MarkerArray getFootprintsMarkerArray(
   return marker_array;
 }
 
+MarkerArray getFootprintsMarkerArrayFor4WS(
+  const std::vector<TrajectoryPoint> & mpt_traj,
+  const vehicle_info_util::VehicleInfo & vehicle_info, const size_t sampling_num)
+{
+  auto marker = createDefaultMarker(
+    "map", rclcpp::Clock().now(), "mpt_footprints", 0, Marker::LINE_STRIP,
+    createMarkerScale(0.05, 0.0, 0.0), createMarkerColor(0.99, 0.99, 0.2, 0.99));
+  marker.lifetime = rclcpp::Duration::from_seconds(1.5);
+
+  MarkerArray marker_array;
+  for (size_t i = 0; i < mpt_traj.size(); ++i) {
+    if (i % sampling_num != 0) {
+      continue;
+    }
+
+    marker.id = i;
+    marker.points.clear();
+
+    const auto & traj_point = mpt_traj.at(i);
+
+    const double half_width = vehicle_info.vehicle_width_m / 2.0;
+    const double base_to_front = vehicle_info.vehicle_length_m / 2.0;
+    const double base_to_rear = vehicle_info.vehicle_length_m / 2.0;
+    marker.points.push_back(
+      tier4_autoware_utils::calcOffsetPose(traj_point.pose, base_to_front, -half_width, 0.0)
+        .position);
+    marker.points.push_back(
+      tier4_autoware_utils::calcOffsetPose(traj_point.pose, base_to_front, half_width, 0.0)
+        .position);
+    marker.points.push_back(
+      tier4_autoware_utils::calcOffsetPose(traj_point.pose, -base_to_rear, half_width, 0.0)
+        .position);
+    marker.points.push_back(
+      tier4_autoware_utils::calcOffsetPose(traj_point.pose, -base_to_rear, -half_width, 0.0)
+        .position);
+    marker.points.push_back(marker.points.front());
+
+    marker_array.markers.push_back(marker);
+  }
+  return marker_array;
+}
+
 MarkerArray getBoundsWidthMarkerArray(
   const std::vector<ReferencePoint> & ref_points, const double vehicle_width,
   const size_t sampling_num)
@@ -340,6 +382,55 @@ MarkerArray getDebugMarker(
   // mpt footprints
   appendMarkerArray(
     getFootprintsMarkerArray(optimized_points, vehicle_info, debug_data.mpt_visualize_sampling_num),
+    &marker_array);
+
+  // bounds lines
+  appendMarkerArray(
+    getBoundsLineMarkerArray(debug_data.ref_points, vehicle_info.vehicle_width_m), &marker_array);
+
+  // bounds width
+  appendMarkerArray(
+    getBoundsWidthMarkerArray(
+      debug_data.ref_points, vehicle_info.vehicle_width_m, debug_data.mpt_visualize_sampling_num),
+    &marker_array);
+
+  // vehicle circle line
+  appendMarkerArray(
+    getVehicleCircleLinesMarkerArray(
+      debug_data.ref_points, debug_data.vehicle_circle_longitudinal_offsets,
+      vehicle_info.vehicle_width_m, debug_data.mpt_visualize_sampling_num, "vehicle_circle_lines"),
+    &marker_array);
+
+  // current vehicle circles
+  appendMarkerArray(
+    getCurrentVehicleCirclesMarkerArray(
+      debug_data.ego_pose, debug_data.vehicle_circle_longitudinal_offsets,
+      debug_data.vehicle_circle_radiuses, "current_vehicle_circles", 1.0, 0.3, 0.3),
+    &marker_array);
+
+  // vehicle circles
+  appendMarkerArray(
+    getVehicleCirclesMarkerArray(
+      optimized_points, debug_data.vehicle_circle_longitudinal_offsets,
+      debug_data.vehicle_circle_radiuses, debug_data.mpt_visualize_sampling_num, "vehicle_circles",
+      1.0, 0.3, 0.3),
+    &marker_array);
+
+  // debug text
+  appendMarkerArray(getPointsTextMarkerArray(debug_data.ref_points), &marker_array);
+
+  return marker_array;
+}
+
+MarkerArray getDebugMarkerFor4WS(
+  const DebugData & debug_data, const std::vector<TrajectoryPoint> & optimized_points,
+  const vehicle_info_util::VehicleInfo & vehicle_info)
+{
+  MarkerArray marker_array;
+
+  // mpt footprints
+  appendMarkerArray(
+    getFootprintsMarkerArrayFor4WS(optimized_points, vehicle_info, debug_data.mpt_visualize_sampling_num),
     &marker_array);
 
   // bounds lines

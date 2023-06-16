@@ -31,5 +31,10 @@ MarkerArray getDebugMarker(
   const DebugData & debug_data,
   const std::vector<autoware_auto_planning_msgs::msg::TrajectoryPoint> & optimized_points,
   const vehicle_info_util::VehicleInfo & vehicle_info);
+
+MarkerArray getDebugMarkerFor4WS(
+  const DebugData & debug_data,
+  const std::vector<autoware_auto_planning_msgs::msg::TrajectoryPoint> & optimized_points,
+  const vehicle_info_util::VehicleInfo & vehicle_info);
 }  // namespace obstacle_avoidance_planner
 #endif  // OBSTACLE_AVOIDANCE_PLANNER__DEBUG_MARKER_HPP_

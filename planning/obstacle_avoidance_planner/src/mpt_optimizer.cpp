@@ -98,6 +98,66 @@ std::tuple<std::vector<double>, std::vector<double>> calcVehicleCirclesByFitting
   return {radiuses, longitudinal_offsets};
 }
 
+std::tuple<std::vector<double>, std::vector<double>> calcVehicleCirclesByUniformCircleFor4WS(
+  const vehicle_info_util::VehicleInfo & vehicle_info, const size_t circle_num,
+  const double radius_ratio)
+{
+  const double radius = std::hypot(
+                          vehicle_info.vehicle_length_m / static_cast<double>(circle_num) / 2.0,
+                          vehicle_info.vehicle_width_m / 2.0) *
+                        radius_ratio;
+  const std::vector<double> radiuses(circle_num, radius);
+
+  const double unit_lon_length = vehicle_info.vehicle_length_m / static_cast<double>(circle_num);
+  std::vector<double> longitudinal_offsets;
+
+  for (int i = -1, cnt = 0; cnt < 3; i++, cnt++) {
+    longitudinal_offsets.push_back(i * (vehicle_info.vehicle_length_m / 2.0 - unit_lon_length / 2.0));
+  }
+  return {radiuses, longitudinal_offsets};
+}
+
+std::tuple<std::vector<double>, std::vector<double>> calcVehicleCirclesByBicycleModelFor4WS(
+  const vehicle_info_util::VehicleInfo & vehicle_info, const size_t circle_num,
+  const double rear_radius_ratio, const double front_radius_ratio)
+{
+  if (circle_num < 2) {
+    throw std::invalid_argument("circle_num is less than 2.");
+  }
+
+  // 1st circle (rear wheel)
+  const double rear_radius = vehicle_info.vehicle_width_m / 2.0 * rear_radius_ratio;
+  const double rear_lon_offset = -vehicle_info.vehicle_length_m / 2.0 + rear_radius;
+
+  // 2nd circle (front wheel)
+  const double front_radius =
+    std::hypot(
+      vehicle_info.vehicle_length_m / static_cast<double>(circle_num) / 2.0,
+      vehicle_info.vehicle_width_m / 2.0) *
+    front_radius_ratio;
+
+  const double unit_lon_length = vehicle_info.vehicle_length_m / static_cast<double>(circle_num);
+  const double front_lon_offset = vehicle_info.vehicle_length_m / 2.0 - unit_lon_length / 2.0;
+  return {{rear_radius, front_radius}, {rear_lon_offset, front_lon_offset}};
+}
+
+std::tuple<std::vector<double>, std::vector<double>> calcVehicleCirclesByFittingUniformCircleFor4WS(
+  const vehicle_info_util::VehicleInfo & vehicle_info, const size_t circle_num)
+{
+  if (circle_num < 2) {
+    throw std::invalid_argument("circle_num is less than 2.");
+  }
+
+  const double radius = vehicle_info.vehicle_width_m / 2.0;
+  std::vector<double> radiuses(circle_num, radius);
+
+  std::vector<double> longitudinal_offsets;
+  for (int i = -1, cnt = 0; cnt < 3; i++, cnt++) {
+    longitudinal_offsets.push_back(i * (vehicle_info.vehicle_length_m / 2.0));
+  }
+  return {radiuses, longitudinal_offsets};
+}
+
 std::tuple<Eigen::VectorXd, Eigen::VectorXd> extractBounds(
   const std::vector<ReferencePoint> & ref_points, const size_t l_idx, const double offset)
 {
@@ -440,23 +500,44 @@ void MPTOptimizer::updateVehicleCircles()
 {
   const auto & p = mpt_param_;
 
-  if (p.vehicle_circles_method == "uniform_circle") {
-    std::tie(vehicle_circle_radiuses_, vehicle_circle_longitudinal_offsets_) =
-      calcVehicleCirclesByUniformCircle(
-        vehicle_info_, p.vehicle_circles_uniform_circle_num,
-        p.vehicle_circles_uniform_circle_radius_ratio);
-  } else if (p.vehicle_circles_method == "bicycle_model") {
-    std::tie(vehicle_circle_radiuses_, vehicle_circle_longitudinal_offsets_) =
-      calcVehicleCirclesByBicycleModel(
-        vehicle_info_, p.vehicle_circles_bicycle_model_num,
-        p.vehicle_circles_bicycle_model_front_radius_ratio,
-        p.vehicle_circles_bicycle_model_rear_radius_ratio);
-  } else if (p.vehicle_circles_method == "fitting_uniform_circle") {
-    std::tie(vehicle_circle_radiuses_, vehicle_circle_longitudinal_offsets_) =
-      calcVehicleCirclesByFittingUniformCircle(
-        vehicle_info_, p.vehicle_circles_fitting_uniform_circle_num);
+  if (mpt_param_.vehicle_model_type == "four_wheel_steering"){
+    if (p.vehicle_circles_method == "uniform_circle") {
+      std::tie(vehicle_circle_radiuses_, vehicle_circle_longitudinal_offsets_) =
+        calcVehicleCirclesByUniformCircleFor4WS(
+          vehicle_info_, p.vehicle_circles_uniform_circle_num,
+          p.vehicle_circles_uniform_circle_radius_ratio);
+    } else if (p.vehicle_circles_method == "bicycle_model") {
+      std::tie(vehicle_circle_radiuses_, vehicle_circle_longitudinal_offsets_) =
+        calcVehicleCirclesByBicycleModelFor4WS(
+          vehicle_info_, p.vehicle_circles_bicycle_model_num,
+          p.vehicle_circles_bicycle_model_front_radius_ratio,
+          p.vehicle_circles_bicycle_model_rear_radius_ratio);
+    } else if (p.vehicle_circles_method == "fitting_uniform_circle") {
+      std::tie(vehicle_circle_radiuses_, vehicle_circle_longitudinal_offsets_) =
+        calcVehicleCirclesByFittingUniformCircleFor4WS(
+          vehicle_info_, p.vehicle_circles_fitting_uniform_circle_num);
+    } else {
+      throw std::invalid_argument("mpt_param_.vehicle_circles_method is invalid.");
+    }
   } else {
-    throw std::invalid_argument("mpt_param_.vehicle_circles_method is invalid.");
+    if (p.vehicle_circles_method == "uniform_circle") {
+      std::tie(vehicle_circle_radiuses_, vehicle_circle_longitudinal_offsets_) =
+        calcVehicleCirclesByUniformCircle(
+          vehicle_info_, p.vehicle_circles_uniform_circle_num,
+          p.vehicle_circles_uniform_circle_radius_ratio);    
+    } else if (p.vehicle_circles_method == "bicycle_model") {
+      std::tie(vehicle_circle_radiuses_, vehicle_circle_longitudinal_offsets_) =
+        calcVehicleCirclesByBicycleModel(
+          vehicle_info_, p.vehicle_circles_bicycle_model_num,
+          p.vehicle_circles_bicycle_model_front_radius_ratio,
+          p.vehicle_circles_bicycle_model_rear_radius_ratio);
+    } else if (p.vehicle_circles_method == "fitting_uniform_circle") {
+      std::tie(vehicle_circle_radiuses_, vehicle_circle_longitudinal_offsets_) =
+        calcVehicleCirclesByFittingUniformCircle(
+          vehicle_info_, p.vehicle_circles_fitting_uniform_circle_num);
+    } else {
+      throw std::invalid_argument("mpt_param_.vehicle_circles_method is invalid.");
+    }
   }
 
   debug_data_ptr_->vehicle_circle_radiuses = vehicle_circle_radiuses_;

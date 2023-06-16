@@ -486,7 +486,10 @@ void ObstacleAvoidancePlanner::publishDebugMarkerOfOptimization(
 
   // debug marker
   time_keeper_ptr_->tic("getDebugMarker");
-  const auto debug_marker = getDebugMarker(*debug_data_ptr_, traj_points, vehicle_info_);
+  std::string ego_vehicle_type;
+  get_parameter<std::string>("mpt.common.vehicle_model_type", ego_vehicle_type);
+  // RCLCPP_INFO(get_logger(), "TTTTTTTTTTTTTTTTTTTTTTTTTT %s", ego_vehicle_type);
+  const auto debug_marker = (ego_vehicle_type == "four_wheel_steering") ? getDebugMarkerFor4WS(*debug_data_ptr_, traj_points, vehicle_info_) : getDebugMarker(*debug_data_ptr_, traj_points, vehicle_info_);
   time_keeper_ptr_->toc("getDebugMarker", "      ");
 
   time_keeper_ptr_->tic("publishDebugMarker");
