@@ -20,6 +20,7 @@
 #include "mpc_lateral_controller/vehicle_model/vehicle_model_bicycle_dynamics.hpp"
 #include "mpc_lateral_controller/vehicle_model/vehicle_model_bicycle_kinematics.hpp"
 #include "mpc_lateral_controller/vehicle_model/vehicle_model_bicycle_kinematics_no_delay.hpp"
+#include "mpc_lateral_controller/vehicle_model/vehicle_model_four_wheel_steering_kinematics_no_delay.hpp"
 #include "tf2/utils.h"
 #include "tf2_ros/create_timer_ros.h"
 #include "vehicle_info_util/vehicle_info_util.hpp"
@@ -170,6 +171,10 @@ std::shared_ptr<VehicleModelInterface> MpcLateralController::createVehicleModel(
   if (vehicle_model_type == "kinematics_no_delay") {
     vehicle_model_ptr = std::make_shared<KinematicsBicycleModelNoDelay>(wheelbase, steer_lim);
     return vehicle_model_ptr;
+  }
+
+  if (vehicle_model_type == "kinematics_4ws_no_delay"){
+    vehicle_model_ptr = std::make_shared<KinematicsFourWheelSteeringModelNoDelay>(wheelbase, steer_lim);
   }
 
   if (vehicle_model_type == "dynamics") {

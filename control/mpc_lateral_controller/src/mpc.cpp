@@ -329,6 +329,8 @@ VectorXd MPC::getInitialState(const MPCData & data)
     x0 << lat_err, yaw_err, steer;
   } else if (vehicle_model == "kinematics_no_delay") {
     x0 << lat_err, yaw_err;
+  } else if (vehicle_model == "kinematics_4ws_no_delay") {
+    x0 << lat_err, yaw_err;
   } else if (vehicle_model == "dynamics") {
     double dlat = (lat_err - m_lateral_error_prev) / m_ctrl_period;
     double dyaw = (yaw_err - m_yaw_error_prev) / m_ctrl_period;
