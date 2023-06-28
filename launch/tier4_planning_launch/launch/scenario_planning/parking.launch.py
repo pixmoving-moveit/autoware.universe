@@ -35,6 +35,21 @@ def launch_setup(context, *args, **kwargs):
     with open(LaunchConfiguration("freespace_planner_param_path").perform(context), "r") as f:
         freespace_planner_param = yaml.safe_load(f)["/**"]["ros__parameters"]
 
+    with open(LaunchConfiguration("common_param_path").perform(context), "r") as f:
+        common_param = yaml.safe_load(f)["/**"]["ros__parameters"]
+
+    with open(LaunchConfiguration("nearest_search_param_path").perform(context), "r") as f:
+        nearest_search_param = yaml.safe_load(f)["/**"]["ros__parameters"]
+
+   
+    with open(LaunchConfiguration("obstacle_stop_planner_param_path").perform(context), "r") as f:
+        obstacle_stop_planner_param = yaml.safe_load(f)["/**"]["ros__parameters"]
+
+    with open(
+        LaunchConfiguration("obstacle_stop_planner_acc_param_path").perform(context), "r"
+    ) as f:
+        obstacle_stop_planner_acc_param = yaml.safe_load(f)["/**"]["ros__parameters"]
+
     container = ComposableNodeContainer(
         name="parking_container",
         namespace="",
@@ -94,7 +109,7 @@ def launch_setup(context, *args, **kwargs):
                     ("~/input/occupancy_grid", "costmap_generator/occupancy_grid"),
                     ("~/input/scenario", "/planning/scenario_planning/scenario"),
                     ("~/input/odometry", "/localization/kinematic_state"),
-                    ("~/output/trajectory", "/planning/scenario_planning/parking/trajectory"),
+                    ("~/output/trajectory", "/planning/scenario_planning/parking/freespace_planner/trajectory"),
                     ("is_completed", "/planning/scenario_planning/parking/is_completed"),
                 ],
                 parameters=[
@@ -105,6 +120,38 @@ def launch_setup(context, *args, **kwargs):
                     {"use_intra_process_comms": LaunchConfiguration("use_intra_process")}
                 ],
             ),
+            ComposableNode(
+                package="obstacle_stop_planner",
+                plugin="motion_planning::ObstacleStopPlannerNode",
+                name="obstacle_stop_planner",
+                namespace="",
+                remappings=[
+                    ("~/output/stop_reason", "/planning/scenario_planning/status/stop_reason"),
+                    ("~/output/stop_reasons", "/planning/scenario_planning/status/stop_reasons"),
+                    ("~/output/max_velocity", "/planning/scenario_planning/max_velocity_candidates"),
+                    (
+                        "~/output/velocity_limit_clear_command",
+                        "/planning/scenario_planning/clear_velocity_limit",
+                    ),
+                    ("~/output/trajectory", "/planning/scenario_planning/parking/trajectory"),
+                    ("~/input/acceleration", "/localization/acceleration"),
+                    (
+                        "~/input/pointcloud",
+                        "/perception/obstacle_segmentation/pointcloud",
+                    ),
+                    ("~/input/objects", "/perception/object_recognition/objects"),
+                    ("~/input/odometry", "/localization/kinematic_state"),
+                    ("~/input/trajectory", "freespace_planner/trajectory"),
+                ],
+                parameters=[
+                    nearest_search_param,
+                    common_param,
+                    obstacle_stop_planner_param,
+                    obstacle_stop_planner_acc_param,
+                    vehicle_info_param,
+                ],
+                extra_arguments=[{"use_intra_process_comms": LaunchConfiguration("use_intra_process")}],
+            )
         ],
     )
 
