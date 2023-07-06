@@ -100,17 +100,36 @@ def launch_setup(context, *args, **kwargs):
                     {"use_intra_process_comms": LaunchConfiguration("use_intra_process")}
                 ],
             ),
+            # ComposableNode(
+            #     package="freespace_planner_preprocessor",
+            #     plugin="freespace_planner_preprocessor::FreeSpacePlannerPreprocessorNode",
+            #     name="freespace_planner_preprocessor",
+            #     remappings=[
+            #         ("~/input/route", "/planning/mission_planning/route"),
+            #         ("~/input/route_state", "/planning/mission_planning/route_state"),
+            #         ("~/input/odometry", "/localization/kinematic_state"),
+            #         ("~/input/scenario", "/planning/scenario_planning/scenario"),
+            #         ("~/input/is_completed", "/planning/scenario_planning/parking/freespace_planner/is_completed"),
+            #         ("~/input/engage", "/autoware/engage"),
+            #         ("~/output/route", "/planning/mission_planning/preprocess_route"),
+            #         ("~/output/route_state", "/planning/mission_planning/preprocess_route_state"),
+            #         ("~/output/scenario", "/planning/scenario_planning/scenario/preprocessor"),
+            #         ("~/output/is_completed", "/planning/scenario_planning/parking/is_completed"),
+            #         ("~/output/engage", "/autoware/engage"),
+
+            #     ]
+            # ),
             ComposableNode(
                 package="freespace_planner",
                 plugin="freespace_planner::FreespacePlannerNode",
                 name="freespace_planner",
                 remappings=[
-                    ("~/input/route", "/planning/mission_planning/route"),
+                    ("~/input/route", "/planning/mission_planning/preprocess_route"),
                     ("~/input/occupancy_grid", "costmap_generator/occupancy_grid"),
-                    ("~/input/scenario", "/planning/scenario_planning/scenario"),
+                    ("~/input/scenario", "/planning/scenario_planning/scenario/preprocessor"),
                     ("~/input/odometry", "/localization/kinematic_state"),
                     ("~/output/trajectory", "/planning/scenario_planning/parking/freespace_planner/trajectory"),
-                    ("is_completed", "/planning/scenario_planning/parking/is_completed"),
+                    ("is_completed", "/planning/scenario_planning/parking/freespace_planner/is_completed"),
                 ],
                 parameters=[
                     freespace_planner_param,
