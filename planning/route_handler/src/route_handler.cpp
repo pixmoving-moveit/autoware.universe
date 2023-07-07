@@ -86,6 +86,56 @@ lanelet::ConstPoint3d get3DPointFrom2DArcLength(
   return lanelet::ConstPoint3d{};
 }
 
+lanelet::ConstPoint3d get3DPointFrom2DArcLengthRightBoundary(
+  const lanelet::ConstLanelets & lanelet_sequence, const double s)
+{
+  double accumulated_distance2d = 0;
+  for (const auto & llt : lanelet_sequence) {
+    const auto & right_boundary = llt.rightBound();
+    lanelet::ConstPoint3d prev_pt;
+    if (!right_boundary.empty()) {
+      prev_pt = right_boundary.front();
+    }
+    for (const auto & pt : right_boundary) {
+      const double distance2d = lanelet::geometry::distance2d(to2D(prev_pt), to2D(pt));
+      if (accumulated_distance2d + distance2d > s) {
+        const double ratio = (s - accumulated_distance2d) / distance2d;
+        const auto interpolated_pt = prev_pt.basicPoint() * (1 - ratio) + pt.basicPoint() * ratio;
+        return lanelet::ConstPoint3d{
+          lanelet::InvalId, interpolated_pt.x(), interpolated_pt.y(), interpolated_pt.z()};
+      }
+      accumulated_distance2d += distance2d;
+      prev_pt = pt;
+    }
+  }
+  return lanelet::ConstPoint3d{};
+}
+
+lanelet::ConstPoint3d get3DPointFrom2DArcLengthLeftBoundary(
+  const lanelet::ConstLanelets & lanelet_sequence, const double s)
+{
+  double accumulated_distance2d = 0;
+  for (const auto & llt : lanelet_sequence) {
+    const auto & left_boundary = llt.leftBound();
+    lanelet::ConstPoint3d prev_pt;
+    if (!left_boundary.empty()) {
+      prev_pt = left_boundary.front();
+    }
+    for (const auto & pt : left_boundary) {
+      const double distance2d = lanelet::geometry::distance2d(to2D(prev_pt), to2D(pt));
+      if (accumulated_distance2d + distance2d > s) {
+        const double ratio = (s - accumulated_distance2d) / distance2d;
+        const auto interpolated_pt = prev_pt.basicPoint() * (1 - ratio) + pt.basicPoint() * ratio;
+        return lanelet::ConstPoint3d{
+          lanelet::InvalId, interpolated_pt.x(), interpolated_pt.y(), interpolated_pt.z()};
+      }
+      accumulated_distance2d += distance2d;
+      prev_pt = pt;
+    }
+  }
+  return lanelet::ConstPoint3d{};
+}
+
 PathWithLaneId removeOverlappingPoints(const PathWithLaneId & input_path)
 {
   PathWithLaneId filtered_path;
@@ -1482,6 +1532,156 @@ PathWithLaneId RouteHandler::getCenterLinePath(
       }
       if (s < s_end && s + distance > s_end) {
         const auto p = use_exact ? get3DPointFrom2DArcLength(lanelet_sequence, s_end) : next_pt;
+        add_path_point(p);
+      }
+      s += distance;
+    }
+  }
+
+  reference_path = removeOverlappingPoints(reference_path);
+
+  // append a point only when having one point so that yaw calculation would work
+  if (reference_path.points.size() == 1) {
+    const int lane_id = static_cast<int>(reference_path.points.front().lane_ids.front());
+    const auto lanelet = lanelet_map_ptr_->laneletLayer.get(lane_id);
+    const auto point = reference_path.points.front().point.pose.position;
+    const auto lane_yaw = lanelet::utils::getLaneletAngle(lanelet, point);
+    PathPointWithLaneId path_point{};
+    path_point.lane_ids.push_back(lane_id);
+    constexpr double ds{0.1};
+    path_point.point.pose.position.x = point.x + ds * std::cos(lane_yaw);
+    path_point.point.pose.position.y = point.y + ds * std::sin(lane_yaw);
+    path_point.point.pose.position.z = point.z;
+    reference_path.points.push_back(path_point);
+  }
+
+  // set angle
+  for (size_t i = 0; i < reference_path.points.size(); i++) {
+    double angle{0.0};
+    const auto & pts = reference_path.points;
+    if (i + 1 < reference_path.points.size()) {
+      angle = tier4_autoware_utils::calcAzimuthAngle(
+        pts.at(i).point.pose.position, pts.at(i + 1).point.pose.position);
+    } else if (i != 0) {
+      angle = tier4_autoware_utils::calcAzimuthAngle(
+        pts.at(i - 1).point.pose.position, pts.at(i).point.pose.position);
+    }
+    reference_path.points.at(i).point.pose.orientation =
+      tier4_autoware_utils::createQuaternionFromYaw(angle);
+  }
+
+  return reference_path;
+}
+
+PathWithLaneId RouteHandler::getRightBoundaryPath(
+  const lanelet::ConstLanelets & lanelet_sequence, const double s_start, const double s_end,
+  bool use_exact) const
+{
+  PathWithLaneId reference_path{};
+  double s = 0;
+
+  for (const auto & llt : lanelet_sequence) {
+    const lanelet::traffic_rules::SpeedLimitInformation limit = traffic_rules_ptr_->speedLimit(llt);
+    const lanelet::ConstLineString3d right_boundary = llt.rightBound();
+
+    const auto add_path_point = [&reference_path, &limit, &llt](const auto & pt) {
+      PathPointWithLaneId p{};
+      p.point.pose.position = lanelet::utils::conversion::toGeomMsgPt(pt);
+      p.lane_ids.push_back(llt.id());
+      p.point.longitudinal_velocity_mps = static_cast<float>(limit.speedLimit.value());
+      reference_path.points.push_back(p);
+    };
+
+    for (size_t i = 0; i < right_boundary.size(); i++) {
+      const auto & pt = right_boundary[i];
+      const lanelet::ConstPoint3d next_pt =
+        (i + 1 < right_boundary.size()) ? right_boundary[i + 1] : right_boundary[i];
+      const double distance = lanelet::geometry::distance2d(to2D(pt), to2D(next_pt));
+
+      if (s < s_start && s + distance > s_start) {
+        const auto p = use_exact ? get3DPointFrom2DArcLengthRightBoundary(lanelet_sequence, s_start) : pt;
+        add_path_point(p);
+      }
+      if (s >= s_start && s <= s_end) {
+        add_path_point(pt);
+      }
+      if (s < s_end && s + distance > s_end) {
+        const auto p = use_exact ? get3DPointFrom2DArcLengthRightBoundary(lanelet_sequence, s_end) : next_pt;
+        add_path_point(p);
+      }
+      s += distance;
+    }
+  }
+
+  reference_path = removeOverlappingPoints(reference_path);
+
+  // append a point only when having one point so that yaw calculation would work
+  if (reference_path.points.size() == 1) {
+    const int lane_id = static_cast<int>(reference_path.points.front().lane_ids.front());
+    const auto lanelet = lanelet_map_ptr_->laneletLayer.get(lane_id);
+    const auto point = reference_path.points.front().point.pose.position;
+    const auto lane_yaw = lanelet::utils::getLaneletAngle(lanelet, point);
+    PathPointWithLaneId path_point{};
+    path_point.lane_ids.push_back(lane_id);
+    constexpr double ds{0.1};
+    path_point.point.pose.position.x = point.x + ds * std::cos(lane_yaw);
+    path_point.point.pose.position.y = point.y + ds * std::sin(lane_yaw);
+    path_point.point.pose.position.z = point.z;
+    reference_path.points.push_back(path_point);
+  }
+
+  // set angle
+  for (size_t i = 0; i < reference_path.points.size(); i++) {
+    double angle{0.0};
+    const auto & pts = reference_path.points;
+    if (i + 1 < reference_path.points.size()) {
+      angle = tier4_autoware_utils::calcAzimuthAngle(
+        pts.at(i).point.pose.position, pts.at(i + 1).point.pose.position);
+    } else if (i != 0) {
+      angle = tier4_autoware_utils::calcAzimuthAngle(
+        pts.at(i - 1).point.pose.position, pts.at(i).point.pose.position);
+    }
+    reference_path.points.at(i).point.pose.orientation =
+      tier4_autoware_utils::createQuaternionFromYaw(angle);
+  }
+
+  return reference_path;
+}
+
+PathWithLaneId RouteHandler::getLeftBoundaryPath(
+  const lanelet::ConstLanelets & lanelet_sequence, const double s_start, const double s_end,
+  bool use_exact) const
+{
+  PathWithLaneId reference_path{};
+  double s = 0;
+
+  for (const auto & llt : lanelet_sequence) {
+    const lanelet::traffic_rules::SpeedLimitInformation limit = traffic_rules_ptr_->speedLimit(llt);
+    const lanelet::ConstLineString3d left_boundary = llt.leftBound();
+
+    const auto add_path_point = [&reference_path, &limit, &llt](const auto & pt) {
+      PathPointWithLaneId p{};
+      p.point.pose.position = lanelet::utils::conversion::toGeomMsgPt(pt);
+      p.lane_ids.push_back(llt.id());
+      p.point.longitudinal_velocity_mps = static_cast<float>(limit.speedLimit.value());
+      reference_path.points.push_back(p);
+    };
+
+    for (size_t i = 0; i < left_boundary.size(); i++) {
+      const auto & pt = left_boundary[i];
+      const lanelet::ConstPoint3d next_pt =
+        (i + 1 < left_boundary.size()) ? left_boundary[i + 1] : left_boundary[i];
+      const double distance = lanelet::geometry::distance2d(to2D(pt), to2D(next_pt));
+
+      if (s < s_start && s + distance > s_start) {
+        const auto p = use_exact ? get3DPointFrom2DArcLengthLeftBoundary(lanelet_sequence, s_start) : pt;
+        add_path_point(p);
+      }
+      if (s >= s_start && s <= s_end) {
+        add_path_point(pt);
+      }
+      if (s < s_end && s + distance > s_end) {
+        const auto p = use_exact ? get3DPointFrom2DArcLengthLeftBoundary(lanelet_sequence, s_end) : next_pt;
         add_path_point(p);
       }
       s += distance;

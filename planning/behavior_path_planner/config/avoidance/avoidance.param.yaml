@@ -21,7 +21,7 @@
       use_hatched_road_markings: false
 
       # for debug
-      publish_debug_marker: false
+      publish_debug_marker: true
       print_debug_info: false
 
       # avoidance is performed for the object type with true

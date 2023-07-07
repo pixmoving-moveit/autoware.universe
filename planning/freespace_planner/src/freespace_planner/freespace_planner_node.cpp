@@ -43,6 +43,7 @@
 
 namespace
 {
+using autoware_auto_planning_msgs::msg::Mission;
 using autoware_auto_planning_msgs::msg::Trajectory;
 using autoware_auto_planning_msgs::msg::TrajectoryPoint;
 using TrajectoryPoints = std::vector<autoware_auto_planning_msgs::msg::TrajectoryPoint>;
@@ -228,6 +229,13 @@ FreespacePlannerNode::FreespacePlannerNode(const rclcpp::NodeOptions & node_opti
     auto & p = node_param_;
     p.planning_algorithm = declare_parameter<std::string>("planning_algorithm");
     p.waypoints_velocity = declare_parameter<double>("waypoints_velocity");
+    p.coverage_sweeping_velocity = declare_parameter<double>("coverage_sweeping_velocity", 3.0);
+    p.reloading_velocity = declare_parameter<double>("reloading_velocity", 3.0);
+    p.boundary_sweeping_velocity = declare_parameter<double>("boundary_sweeping_velocity", 3.0);
+    p.searching_sweeping_velocity = declare_parameter<double>("searching_sweeping_velocity", 3.0);
+    p.dumping_trash_velocity = declare_parameter<double>("dumping_trash_velocity", 3.0);
+    p.parking_mpc_velocity = declare_parameter<double>("parking_mpc_velocity", 3.0);
+    p.navigation_mpc_velocity = declare_parameter<double>("navigation_mpc_velocity", 3.0);
     p.update_rate = declare_parameter<double>("update_rate");
     p.th_arrived_distance_m = declare_parameter<double>("th_arrived_distance_m");
     p.th_stopped_time_sec = declare_parameter<double>("th_stopped_time_sec");
@@ -348,6 +356,11 @@ void FreespacePlannerNode::onOdometry(const Odometry::ConstSharedPtr msg)
 
     odom_buffer_.pop_front();
   }
+}
+
+void FreespacePlannerNode::onMission(const Mission::ConstSharedPtr msg)
+{
+  current_mission_ = msg;
 }
 
 bool FreespacePlannerNode::isPlanRequired()

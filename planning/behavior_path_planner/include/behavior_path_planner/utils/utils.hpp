@@ -334,6 +334,18 @@ PathWithLaneId getCenterLinePath(
   const Pose & pose, const double backward_path_length, const double forward_path_length,
   const BehaviorPathPlannerParameters & parameter, const double optional_length = 0.0);
 
+PathWithLaneId getRightBoundaryPath(
+  const RouteHandler & route_handler, const lanelet::ConstLanelets & lanelet_sequence,
+  const Pose & pose, const double backward_path_length, const double forward_path_length,
+  const BehaviorPathPlannerParameters & parameter, const double optional_length = 0.0);
+
+PathWithLaneId getLeftBoundaryPath(
+  const RouteHandler & route_handler, const lanelet::ConstLanelets & lanelet_sequence,
+  const Pose & pose, const double backward_path_length, const double forward_path_length,
+  const BehaviorPathPlannerParameters & parameter, const double optional_length = 0.0);
+
+void boundaryPlanningForPathWithLaneId(PathWithLaneId & path_msg, const float & dist_to_shift);
+
 PathWithLaneId setDecelerationVelocity(
   const RouteHandler & route_handler, const PathWithLaneId & input,
   const lanelet::ConstLanelets & lanelet_sequence, const double lane_change_prepare_duration,

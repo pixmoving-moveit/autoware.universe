@@ -2400,6 +2400,122 @@ PathWithLaneId getCenterLinePath(
   return resampled_path_with_lane_id;
 }
 
+PathWithLaneId getRightBoundaryPath(
+  const RouteHandler & route_handler, const lanelet::ConstLanelets & lanelet_sequence,
+  const Pose & pose, const double backward_path_length, const double forward_path_length,
+  const BehaviorPathPlannerParameters & parameter, const double optional_length)
+{
+  PathWithLaneId reference_path;
+
+  if (lanelet_sequence.empty()) {
+    return reference_path;
+  }
+
+  const auto arc_coordinates = lanelet::utils::getArcCoordinates(lanelet_sequence, pose);
+  const double s = arc_coordinates.length;
+  const double s_backward = std::max(0., s - backward_path_length);
+  double s_forward = s + forward_path_length;
+
+  const double lane_length = lanelet::utils::getLaneletLength2d(lanelet_sequence);
+  const auto shift_intervals =
+    route_handler.getLateralIntervalsToPreferredLane(lanelet_sequence.back());
+  const double lane_change_buffer =
+    utils::calcMinimumLaneChangeLength(parameter, shift_intervals, optional_length);
+
+  if (route_handler.isDeadEndLanelet(lanelet_sequence.back())) {
+    const double forward_length = std::max(lane_length - lane_change_buffer, 0.0);
+    s_forward = std::min(s_forward, forward_length);
+  }
+
+  if (route_handler.isInGoalRouteSection(lanelet_sequence.back())) {
+    const auto goal_arc_coordinates =
+      lanelet::utils::getArcCoordinates(lanelet_sequence, route_handler.getGoalPose());
+    const double forward_length = std::max(goal_arc_coordinates.length - lane_change_buffer, 0.0);
+    s_forward = std::min(s_forward, forward_length);
+  }
+
+  const auto raw_path_with_lane_id =
+    route_handler.getRightBoundaryPath(lanelet_sequence, s_backward, s_forward, true);
+  const auto resampled_path_with_lane_id = motion_utils::resamplePath(
+    raw_path_with_lane_id, parameter.input_path_interval, parameter.enable_akima_spline_first);
+
+  // convert centerline, which we consider as CoG center,  to rear wheel center
+  if (parameter.enable_cog_on_centerline) {
+    const double rear_to_cog = parameter.vehicle_length / 2 - parameter.rear_overhang;
+    return motion_utils::convertToRearWheelCenter(resampled_path_with_lane_id, rear_to_cog);
+  }
+
+  return resampled_path_with_lane_id;
+}
+
+PathWithLaneId getLeftBoundaryPath(
+  const RouteHandler & route_handler, const lanelet::ConstLanelets & lanelet_sequence,
+  const Pose & pose, const double backward_path_length, const double forward_path_length,
+  const BehaviorPathPlannerParameters & parameter, const double optional_length)
+{
+  PathWithLaneId reference_path;
+
+  if (lanelet_sequence.empty()) {
+    return reference_path;
+  }
+
+  const auto arc_coordinates = lanelet::utils::getArcCoordinates(lanelet_sequence, pose);
+  const double s = arc_coordinates.length;
+  const double s_backward = std::max(0., s - backward_path_length);
+  double s_forward = s + forward_path_length;
+
+  const double lane_length = lanelet::utils::getLaneletLength2d(lanelet_sequence);
+  const auto shift_intervals =
+    route_handler.getLateralIntervalsToPreferredLane(lanelet_sequence.back());
+  const double lane_change_buffer =
+    utils::calcMinimumLaneChangeLength(parameter, shift_intervals, optional_length);
+
+  if (route_handler.isDeadEndLanelet(lanelet_sequence.back())) {
+    const double forward_length = std::max(lane_length - lane_change_buffer, 0.0);
+    s_forward = std::min(s_forward, forward_length);
+  }
+
+  if (route_handler.isInGoalRouteSection(lanelet_sequence.back())) {
+    const auto goal_arc_coordinates =
+      lanelet::utils::getArcCoordinates(lanelet_sequence, route_handler.getGoalPose());
+    const double forward_length = std::max(goal_arc_coordinates.length - lane_change_buffer, 0.0);
+    s_forward = std::min(s_forward, forward_length);
+  }
+
+  const auto raw_path_with_lane_id =
+    route_handler.getLeftBoundaryPath(lanelet_sequence, s_backward, s_forward, true);
+  const auto resampled_path_with_lane_id = motion_utils::resamplePath(
+    raw_path_with_lane_id, parameter.input_path_interval, parameter.enable_akima_spline_first);
+
+  // convert centerline, which we consider as CoG center,  to rear wheel center
+  if (parameter.enable_cog_on_centerline) {
+    const double rear_to_cog = parameter.vehicle_length / 2 - parameter.rear_overhang;
+    return motion_utils::convertToRearWheelCenter(resampled_path_with_lane_id, rear_to_cog);
+  }
+
+  return resampled_path_with_lane_id;
+}
+
+void boundaryPlanningForPathWithLaneId(PathWithLaneId &path_msg, const float & dist_to_shift)
+{
+  for(size_t i=0;i<path_msg.points.size();i++)
+  {
+    double yaw,pitch,roll;
+    double new_x, new_y;
+    tf2::Quaternion q_temp;
+    q_temp.setX(path_msg.points.at(i).point.pose.orientation.x);
+    q_temp.setY(path_msg.points.at(i).point.pose.orientation.y);
+    q_temp.setZ(path_msg.points.at(i).point.pose.orientation.z);
+    q_temp.setW(path_msg.points.at(i).point.pose.orientation.w);
+    // tf2::convert(path_msg.points.at(i).point.pose, q_temp);
+    tf2::getEulerYPR(q_temp, yaw, pitch, roll);
+    new_x = -dist_to_shift * sin(yaw) + path_msg.points.at(i).point.pose.position.x;
+    new_y = dist_to_shift * cos(yaw) + path_msg.points.at(i).point.pose.position.y;
+    path_msg.points.at(i).point.pose.position.x = new_x;
+    path_msg.points.at(i).point.pose.position.y = new_y;
+  }
+}
+
 // for lane following
 PathWithLaneId setDecelerationVelocity(
   const RouteHandler & route_handler, const PathWithLaneId & input,
@@ -2473,9 +2589,21 @@ BehaviorModuleOutput getReferencePath(
   const double backward_length = p.backward_path_length + extra_margin;
   const auto current_lanes_with_backward_margin = route_handler->getLaneletSequence(
     current_lane, current_pose, backward_length, p.forward_path_length);
-  reference_path = getCenterLinePath(
-    *route_handler, current_lanes_with_backward_margin, current_pose, backward_length,
-    p.forward_path_length, p);
+  if(planner_data->current_mission->lane_driving_sweeping_mode==Mission::LANE_DRIVING_RIGHT_SWEEPING){
+    reference_path = getRightBoundaryPath(
+      *route_handler, current_lanes_with_backward_margin, current_pose, backward_length,
+      p.forward_path_length, p);
+    boundaryPlanningForPathWithLaneId(reference_path, 1.2);
+  }else if(planner_data->current_mission->lane_driving_sweeping_mode==Mission::LANE_DRIVING_LEFT_SWEEPING){
+    reference_path = getLeftBoundaryPath(
+      *route_handler, current_lanes_with_backward_margin, current_pose, backward_length,
+      p.forward_path_length, p);
+    boundaryPlanningForPathWithLaneId(reference_path, -1.2); 
+  }else{
+    reference_path = getCenterLinePath(
+      *route_handler, current_lanes_with_backward_margin, current_pose, backward_length,
+      p.forward_path_length, p);
+  }
 
   // clip backward length
   // NOTE: In order to keep backward_path_length at least, resampling interval is added to the

@@ -212,8 +212,21 @@ AvoidancePlanningData AvoidanceModule::calcAvoidancePlanningData(DebugData & deb
 
   // center line path (output of this function must have size > 1)
 #ifdef USE_OLD_ARCHITECTURE
-  const auto center_path =
-    utils::calcCenterLinePath(planner_data_, reference_pose, longest_dist_to_shift_line);
+  // const auto center_path =
+  //   utils::calcCenterLinePath(planner_data_, reference_pose, longest_dist_to_shift_line);
+  PathWithLaneId center_path;
+  if(planner_data_->current_mission->lane_driving_sweeping_mode==Mission::LANE_DRIVING_LEFT_SWEEPING){
+    center_path =
+      utils::calcLeftBoundaryPath(planner_data_, reference_pose, longest_dist_to_shift_line);
+    utils::boundaryPlanningForPathWithLaneId(center_path, -1.2); 
+  }else if(planner_data_->current_mission->lane_driving_sweeping_mode==Mission::LANE_DRIVING_RIGHT_SWEEPING){
+    center_path =
+      utils::calcRightBoundaryPath(planner_data_, reference_pose, longest_dist_to_shift_line);
+    utils::boundaryPlanningForPathWithLaneId(center_path, 1.2); 
+  }else{
+    center_path =
+      utils::calcCenterLinePath(planner_data_, reference_pose, longest_dist_to_shift_line);
+  }
 #else
   const auto center_path = utils::calcCenterLinePath(
     planner_data_, reference_pose, longest_dist_to_shift_line,
@@ -851,7 +864,7 @@ AvoidLineArray AvoidanceModule::calcRawShiftLinesFromObjects(
       al_avoid.start_shift_length = current_ego_shift;
       al_avoid.end_shift_length = shift_length;
       al_avoid.start_longitudinal = o.longitudinal - offset - avoiding_distance;
-      al_avoid.end_longitudinal = o.longitudinal - offset;
+      al_avoid.end_longitudinal = o.longitudinal - offset + o.length;
       al_avoid.id = getOriginalShiftLineUniqueId();
       al_avoid.object = o;
 

@@ -19,6 +19,7 @@
 
 #include <autoware_auto_mapping_msgs/msg/had_map_bin.hpp>
 #include <autoware_auto_planning_msgs/msg/trajectory.hpp>
+#include <autoware_auto_planning_msgs/msg/mission.hpp>
 #include <autoware_planning_msgs/msg/lanelet_route.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
@@ -51,6 +52,7 @@ public:
   void onRoute(const autoware_planning_msgs::msg::LaneletRoute::ConstSharedPtr msg);
   void onOdom(const nav_msgs::msg::Odometry::ConstSharedPtr msg);
   void onParkingState(const std_msgs::msg::Bool::ConstSharedPtr msg);
+  void onCurrentMission(const autoware_auto_planning_msgs::msg::Mission::ConstSharedPtr msg);
 
   bool isDataReady();
   void onTimer();

@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>coverage_planning</name>
+  <version>0.0.0</version>
+  <description>The coverage_planning package</description>
+
+  <maintainer email="mark@pixmoving.net">Mark Jin</maintainer>
+
+
+  <!-- One license tag required, multiple allowed, one license per tag -->
+  <!-- Commonly used license strings: -->
+  <!--   BSD, MIT, Boost Software License, GPLv2, GPLv3, LGPLv2.1, LGPLv3 -->
+  <license>Apache License 2.0</license>
+
+  <buildtool_depend>ament_cmake_auto</buildtool_depend>
+  <buildtool_depend>autoware_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>autoware_auto_mapping_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>autoware_auto_planning_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>lanelet2_extension</depend>
+
+  <!-- The export tag contains other, unspecified, tags -->
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

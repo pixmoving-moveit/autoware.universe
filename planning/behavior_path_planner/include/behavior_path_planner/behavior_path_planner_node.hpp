@@ -50,6 +50,7 @@
 #include <autoware_auto_perception_msgs/msg/predicted_objects.hpp>
 #include <autoware_auto_planning_msgs/msg/path.hpp>
 #include <autoware_auto_planning_msgs/msg/path_with_lane_id.hpp>
+#include <autoware_auto_planning_msgs/msg/mission.hpp>
 #include <autoware_auto_vehicle_msgs/msg/hazard_lights_command.hpp>
 #include <autoware_auto_vehicle_msgs/msg/turn_indicators_command.hpp>
 #include <autoware_planning_msgs/msg/lanelet_route.hpp>
@@ -76,6 +77,7 @@ using autoware_adapi_v1_msgs::msg::OperationModeState;
 using autoware_auto_mapping_msgs::msg::HADMapBin;
 using autoware_auto_perception_msgs::msg::PredictedObject;
 using autoware_auto_perception_msgs::msg::PredictedObjects;
+using autoware_auto_planning_msgs::msg::Mission;
 using autoware_auto_planning_msgs::msg::Path;
 using autoware_auto_planning_msgs::msg::PathWithLaneId;
 using autoware_auto_vehicle_msgs::msg::HazardLightsCommand;
@@ -114,6 +116,7 @@ private:
   rclcpp::Subscription<OccupancyGrid>::SharedPtr costmap_subscriber_;
   rclcpp::Subscription<LateralOffset>::SharedPtr lateral_offset_subscriber_;
   rclcpp::Subscription<OperationModeState>::SharedPtr operation_mode_subscriber_;
+  rclcpp::Subscription<Mission>::SharedPtr current_mission_subscriber_;
   rclcpp::Publisher<PathWithLaneId>::SharedPtr path_publisher_;
   rclcpp::Publisher<TurnIndicatorsCommand>::SharedPtr turn_signal_publisher_;
   rclcpp::Publisher<HazardLightsCommand>::SharedPtr hazard_signal_publisher_;
@@ -141,10 +144,13 @@ private:
   bool has_received_map_{false};
   bool has_received_route_{false};
 
+  Mission::ConstSharedPtr current_mission_ptr_{nullptr};
+
   std::mutex mutex_pd_;       // mutex for planner_data_
   std::mutex mutex_manager_;  // mutex for bt_manager_ or planner_manager_
   std::mutex mutex_map_;      // mutex for has_received_map_ and map_ptr_
   std::mutex mutex_route_;    // mutex for has_received_route_ and route_ptr_
+  std::mutex mutex_mission_;  // mutex for current_mission_ptr_
 
   // setup
   bool isDataReady();
@@ -184,6 +190,7 @@ private:
   void onRoute(const LaneletRoute::ConstSharedPtr route_msg);
   void onOperationMode(const OperationModeState::ConstSharedPtr msg);
   void onLateralOffset(const LateralOffset::ConstSharedPtr msg);
+  void onCurrentMission(const Mission::ConstSharedPtr msg);
   SetParametersResult onSetParam(const std::vector<rclcpp::Parameter> & parameters);
 
   OnSetParametersCallbackHandle::SharedPtr m_set_param_res;

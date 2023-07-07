@@ -1,0 +1,19 @@
+<launch>
+  <arg name="sub_map_topic" default="/map/vector_map" />
+  <arg name="sub_current_mission_topic" default="/planning/mission_planner/current_mission" />
+  <arg name="sub_current_twist_topic" default="/current_twist" />
+  <arg name="sub_goal_pose_topic" default="/planning/mission_planning/goal" />
+  <arg name="pub_traj_topic" default="/planning/scenario_planning/parking/freespace_planner/coverage_trajectory" />
+  <arg name="pub_partial_traj_index_topic" default="/planning/scenario_planning/parking/freespace_planner/coverage_partial_traj_index" />
+  <arg name="get_coverage_trajectory" default="/planning/scenario_planning/parking/freespace_planner/get_coverage_trajectory" />
+
+  <node pkg="coverage_planning" exec="coverage_planning_node" name="coverage_planning" output="screen">
+    <remap from="~/input/lanelet2_map" to="$(var sub_map_topic)" />
+    <remap from="~/input/current_mission" to="$(var sub_current_mission_topic)" />
+    <remap from="~/input/current_twist" to="$(var sub_current_twist_topic)" />
+    <remap from="~/input/goal_pose_topic" to="$(var sub_goal_pose_topic)" />
+    <remap from="~/output/coverage_trajectory" to="$(var pub_traj_topic)" />
+    <remap from="~/output/partial_traj_index" to="$(var pub_partial_traj_index_topic)" />
+    <remap from="~/srv/get_coverage_trajectory" to="$(var get_coverage_trajectory)" />
+  </node>
+</launch>

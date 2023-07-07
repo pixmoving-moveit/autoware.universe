@@ -99,6 +99,9 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
   lateral_offset_subscriber_ = this->create_subscription<LateralOffset>(
     "~/input/lateral_offset", 1, std::bind(&BehaviorPathPlannerNode::onLateralOffset, this, _1),
     createSubscriptionOptions(this));
+  current_mission_subscriber_ = this->create_subscription<Mission>(
+    "~/input/current_mission", 1, std::bind(&BehaviorPathPlannerNode::onCurrentMission, this, _1),
+    createSubscriptionOptions(this));
   operation_mode_subscriber_ = create_subscription<OperationModeState>(
     "/system/operation_mode/state", 1,
     std::bind(&BehaviorPathPlannerNode::onOperationMode, this, _1),
@@ -131,6 +134,8 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
     avoidance_by_lc_param_ptr_ = std::make_shared<AvoidanceByLCParameters>(
       getAvoidanceByLCParam(avoidance_param_ptr_, lane_change_param_ptr_));
   }
+
+  current_mission_ptr_ = std::make_shared<Mission>();
 
   m_set_param_res = this->add_on_set_parameters_callback(
     std::bind(&BehaviorPathPlannerNode::onSetParam, this, std::placeholders::_1));
@@ -1193,6 +1198,9 @@ void BehaviorPathPlannerNode::run()
     }
   }
 
+  // set current mission
+  planner_data_->current_mission = std::make_shared<Mission>(*current_mission_ptr_);
+
   std::unique_lock<std::mutex> lk_pd(mutex_pd_);  // for planner_data_
 
   // update map
@@ -1614,6 +1622,12 @@ void BehaviorPathPlannerNode::onLateralOffset(const LateralOffset::ConstSharedPt
   }
 
   planner_data_->lateral_offset = msg;
+}
+
+void BehaviorPathPlannerNode::onCurrentMission(const Mission::ConstSharedPtr msg)
+{
+  std::lock_guard<std::mutex> lock(mutex_mission_);
+  current_mission_ptr_ = msg;
 }
 
 SetParametersResult BehaviorPathPlannerNode::onSetParam(

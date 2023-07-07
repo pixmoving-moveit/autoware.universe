@@ -1,0 +1,5 @@
+geometry_msgs/PoseStamped goal_pose                     # goal pose 
+std_msgs/Float32 velocity                               # m/s
+---
+autoware_planning_msgs/Trajectory coverage_trajectory   # planned coverage trajectory using coverage planning 
+std_msgs/Int16MultiArray partial_index       # partial indices of the break of several trajectories

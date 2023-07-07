@@ -123,13 +123,15 @@ void Lanelet2MapVisualizationNode::onMapBin(
       viz_lanelet_map, "no_obstacle_segmentation_area_for_run_out");
   lanelet::ConstPolygons3d hatched_road_markings_area =
     lanelet::utils::query::getAllPolygonsByType(viz_lanelet_map, "hatched_road_markings");
+  lanelet::ConstLineStrings3d coverage_paths = lanelet::utils::query::getAllCoverRefs(viz_lanelet_map);
+  lanelet::ConstPolygons3d garbage_cans = lanelet::utils::query::getAllPolygonsByType(viz_lanelet_map, "garbage_can");
 
   std_msgs::msg::ColorRGBA cl_road, cl_shoulder, cl_cross, cl_partitions, cl_pedestrian_markings,
     cl_ll_borders, cl_shoulder_borders, cl_stoplines, cl_trafficlights, cl_detection_areas,
     cl_speed_bumps, cl_parking_lots, cl_parking_spaces, cl_lanelet_id, cl_obstacle_polygons,
     cl_no_stopping_areas, cl_no_obstacle_segmentation_area,
     cl_no_obstacle_segmentation_area_for_run_out, cl_hatched_road_markings_area,
-    cl_hatched_road_markings_line;
+    cl_hatched_road_markings_line, cl_coverage_paths, cl_garbage_cans;
   setColor(&cl_road, 0.27, 0.27, 0.27, 0.999);
   setColor(&cl_shoulder, 0.15, 0.15, 0.15, 0.999);
   setColor(&cl_cross, 0.27, 0.3, 0.27, 0.5);
@@ -150,6 +152,8 @@ void Lanelet2MapVisualizationNode::onMapBin(
   setColor(&cl_no_obstacle_segmentation_area_for_run_out, 0.37, 0.7, 0.27, 0.5);
   setColor(&cl_hatched_road_markings_area, 0.3, 0.3, 0.3, 0.5);
   setColor(&cl_hatched_road_markings_line, 0.5, 0.5, 0.5, 0.999);
+  setColor(&cl_coverage_paths, 0.949, 0.0, 1.0, 0.999);
+  setColor(&cl_garbage_cans, 0.435, 0.8666, 0.666, 0.999);
 
   visualization_msgs::msg::MarkerArray map_marker_array;
 
@@ -228,6 +232,14 @@ void Lanelet2MapVisualizationNode::onMapBin(
     &map_marker_array,
     lanelet::visualization::hatchedRoadMarkingsAreaAsMarkerArray(
       hatched_road_markings_area, cl_hatched_road_markings_area, cl_hatched_road_markings_line));
+  
+  insertMarkerArray(
+    &map_marker_array,
+    lanelet::visualization::lineStringsAsMarkerArray(coverage_paths, "coverage_paths", cl_coverage_paths, 0.2));
+    
+  insertMarkerArray(
+    &map_marker_array,
+    lanelet::visualization::garbageCansAsMarkerArray(garbage_cans, cl_garbage_cans));
 
   pub_marker_->publish(map_marker_array);
 }

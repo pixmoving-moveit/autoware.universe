@@ -37,6 +37,7 @@
 #include <vehicle_info_util/vehicle_info_util.hpp>
 
 #include <autoware_auto_planning_msgs/msg/trajectory.hpp>
+#include <autoware_auto_planning_msgs/msg/mission.hpp>
 #include <autoware_planning_msgs/msg/lanelet_route.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
@@ -63,6 +64,7 @@
 
 namespace freespace_planner
 {
+using autoware_auto_planning_msgs::msg::Mission;
 using autoware_auto_planning_msgs::msg::Trajectory;
 using autoware_planning_msgs::msg::LaneletRoute;
 using freespace_planning_algorithms::AbstractPlanningAlgorithm;
@@ -84,7 +86,14 @@ struct NodeParam
 {
   std::string planning_algorithm;
   double waypoints_velocity;  // constant velocity on planned waypoints [km/h]
-  double update_rate;         // replanning and publishing rate [Hz]
+  double coverage_sweeping_velocity;
+  double reloading_velocity;
+  double boundary_sweeping_velocity;
+  double searching_sweeping_velocity;
+  double dumping_trash_velocity;
+  double parking_mpc_velocity;
+  double navigation_mpc_velocity;
+  double update_rate;  // replanning and publishing rate [Hz]
   double th_arrived_distance_m;
   double th_stopped_time_sec;
   double th_stopped_velocity_mps;
@@ -102,6 +111,7 @@ public:
 private:
   // ros
   rclcpp::Publisher<Trajectory>::SharedPtr trajectory_pub_;
+  rclcpp::Publisher<Mission>::SharedPtr mission_pub_;
   rclcpp::Publisher<PoseArray>::SharedPtr debug_pose_array_pub_;
   rclcpp::Publisher<PoseArray>::SharedPtr debug_partial_pose_array_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr parking_state_pub_;
@@ -132,6 +142,8 @@ private:
   size_t target_index_;
   bool is_completed_ = false;
 
+  Mission::ConstSharedPtr current_mission_;
+
   LaneletRoute::ConstSharedPtr route_;
   OccupancyGrid::ConstSharedPtr occupancy_grid_;
   Scenario::ConstSharedPtr scenario_;
@@ -148,6 +160,7 @@ private:
   void onOccupancyGrid(const OccupancyGrid::ConstSharedPtr msg);
   void onScenario(const Scenario::ConstSharedPtr msg);
   void onOdometry(const Odometry::ConstSharedPtr msg);
+  void onMission(const Mission::ConstSharedPtr msg);
 
   void onTimer();
 

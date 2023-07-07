@@ -525,4 +525,75 @@ PathWithLaneId calcCenterLinePath(
 
   return centerline_path;
 }
+
+PathWithLaneId calcRightBoundaryPath(
+  const std::shared_ptr<const PlannerData> & planner_data, const Pose & ref_pose,
+  const double longest_dist_to_shift_line, const std::optional<PathWithLaneId> & prev_module_path)
+{
+  const auto & p = planner_data->parameters;
+  const auto & route_handler = planner_data->route_handler;
+
+  PathWithLaneId right_boundary_path;
+
+  const auto extra_margin = 10.0;  // Since distance does not consider arclength, but just line.
+  const auto backward_length =
+    std::max(p.backward_path_length, longest_dist_to_shift_line + extra_margin);
+
+  RCLCPP_DEBUG(
+    rclcpp::get_logger("path_utils"),
+    "p.backward_path_length = %f, longest_dist_to_shift_line = %f, backward_length = %f",
+    p.backward_path_length, longest_dist_to_shift_line, backward_length);
+
+  const lanelet::ConstLanelets current_lanes = [&]() {
+    if (!prev_module_path) {
+      return utils::calcLaneAroundPose(
+        route_handler, ref_pose, p.forward_path_length, backward_length);
+    }
+    return utils::getCurrentLanesFromPath(*prev_module_path, planner_data);
+  }();
+
+  right_boundary_path = utils::getRightBoundaryPath(
+    *route_handler, current_lanes, ref_pose, backward_length, p.forward_path_length, p);
+
+  right_boundary_path.header = route_handler->getRouteHeader();
+
+  return right_boundary_path;
+}
+
+PathWithLaneId calcLeftBoundaryPath(
+  const std::shared_ptr<const PlannerData> & planner_data, const Pose & ref_pose,
+  const double longest_dist_to_shift_line, const std::optional<PathWithLaneId> & prev_module_path)
+{
+  const auto & p = planner_data->parameters;
+  const auto & route_handler = planner_data->route_handler;
+
+  PathWithLaneId left_boundary_path;
+
+  const auto extra_margin = 10.0;  // Since distance does not consider arclength, but just line.
+  const auto backward_length =
+    std::max(p.backward_path_length, longest_dist_to_shift_line + extra_margin);
+
+  RCLCPP_DEBUG(
+    rclcpp::get_logger("path_utils"),
+    "p.backward_path_length = %f, longest_dist_to_shift_line = %f, backward_length = %f",
+    p.backward_path_length, longest_dist_to_shift_line, backward_length);
+
+  const lanelet::ConstLanelets current_lanes = [&]() {
+    if (!prev_module_path) {
+      return utils::calcLaneAroundPose(
+        route_handler, ref_pose, p.forward_path_length, backward_length);
+    }
+    return utils::getCurrentLanesFromPath(*prev_module_path, planner_data);
+  }();
+
+  left_boundary_path = utils::getLeftBoundaryPath(
+    *route_handler, current_lanes, ref_pose, backward_length, p.forward_path_length, p);
+
+  left_boundary_path.header = route_handler->getRouteHeader();
+
+  return left_boundary_path;
+}
+
+
+
 }  // namespace behavior_path_planner::utils

@@ -25,6 +25,7 @@
 #include <autoware_adapi_v1_msgs/msg/operation_mode_state.hpp>
 #include <autoware_auto_perception_msgs/msg/predicted_objects.hpp>
 #include <autoware_auto_planning_msgs/msg/path_with_lane_id.hpp>
+#include <autoware_auto_planning_msgs/msg/mission.hpp>
 #include <autoware_auto_vehicle_msgs/msg/hazard_lights_command.hpp>
 #include <autoware_auto_vehicle_msgs/msg/turn_indicators_command.hpp>
 #include <autoware_planning_msgs/msg/pose_with_uuid_stamped.hpp>
@@ -46,6 +47,7 @@ namespace behavior_path_planner
 using autoware_adapi_v1_msgs::msg::OperationModeState;
 using autoware_auto_perception_msgs::msg::PredictedObject;
 using autoware_auto_perception_msgs::msg::PredictedObjects;
+using autoware_auto_planning_msgs::msg::Mission;
 using autoware_auto_planning_msgs::msg::PathWithLaneId;
 using autoware_auto_vehicle_msgs::msg::HazardLightsCommand;
 using autoware_auto_vehicle_msgs::msg::TurnIndicatorsCommand;
@@ -140,6 +142,7 @@ struct PlannerData
   OperationModeState::ConstSharedPtr operation_mode{};
   PathWithLaneId::SharedPtr reference_path{std::make_shared<PathWithLaneId>()};
   PathWithLaneId::SharedPtr prev_output_path{std::make_shared<PathWithLaneId>()};
+  Mission::SharedPtr current_mission{std::make_shared<Mission>()};
   std::optional<PoseWithUuidStamped> prev_modified_goal{};
   std::optional<UUID> prev_route_id{};
   lanelet::ConstLanelets current_lanes{};
