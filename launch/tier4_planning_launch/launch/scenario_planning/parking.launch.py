@@ -116,6 +116,7 @@ def launch_setup(context, *args, **kwargs):
                     ("~/output/scenario", "/planning/scenario_planning/scenario/preprocessor"),
                     ("~/output/is_completed", "/planning/scenario_planning/parking/is_completed"),
                     ("~/output/engage", "/autoware/engage"),
+                    ("~/output/velocity_limit", "/planning/scenario_planning/max_velocity_default")
                 ]
             ),
             ComposableNode(

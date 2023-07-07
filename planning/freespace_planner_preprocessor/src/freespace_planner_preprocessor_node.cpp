@@ -45,6 +45,13 @@ void StartUp::Handle(){
     msg.state = RouteState::SET;
     preprocessor_->node_->route_state_pub_->publish(msg);
   }
+  VelocityLimit vel;
+  if (preprocessor_->goal_type_ == GoalType::Preview){
+    vel.max_velocity = 1.0;
+  } else {
+    vel.max_velocity = 0.3;
+  }
+  preprocessor_->node_->velocity_limit_pub_->publish(vel);
   Engage msg;
   msg.engage = true;
   preprocessor_->node_->engage_pub_->publish(msg);
@@ -203,6 +210,9 @@ FreeSpacePlannerPreprocessorNode::FreeSpacePlannerPreprocessorNode(const rclcpp:
   );
   engage_pub_ = create_publisher<Engage>(
     "~/output/engage", rclcpp::QoS{1}.transient_local()
+  );
+  velocity_limit_pub_ = create_publisher<tier4_planning_msgs::msg::VelocityLimit>(
+    "~/output/velocity_limit", rclcpp::QoS{1}.transient_local()
   );
   // 定时器
   const double loop_rate = 10;

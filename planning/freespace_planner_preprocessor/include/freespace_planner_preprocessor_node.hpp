@@ -19,9 +19,9 @@
 #include <tf2/convert.h>
 #include <tf2/utils.h>
 #include <tier4_planning_msgs/msg/scenario.hpp>
+#include <tier4_planning_msgs/msg/velocity_limit.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <autoware_auto_vehicle_msgs/msg/engage.hpp>
-
 namespace freespace_planner_preprocessor
 {
 
@@ -34,6 +34,7 @@ using tier4_planning_msgs::msg::Scenario;
 using std_msgs::msg::Bool;
 using autoware_auto_vehicle_msgs::msg::Engage;
 using motion_utils::VehicleStopChecker;
+using tier4_planning_msgs::msg::VelocityLimit;
 
 struct Coordinate {
   double x;
@@ -194,6 +195,7 @@ public:
     rclcpp::Publisher<Bool>::SharedPtr parking_state_pub_;
     rclcpp::Publisher<Scenario>::SharedPtr scenario_pub_;
     rclcpp::Publisher<Engage>::SharedPtr engage_pub_;
+    rclcpp::Publisher<VelocityLimit>::SharedPtr velocity_limit_pub_;
 
     Odometry::ConstSharedPtr odom_ptr_;
     LaneletRoute::ConstSharedPtr route_ptr_;
