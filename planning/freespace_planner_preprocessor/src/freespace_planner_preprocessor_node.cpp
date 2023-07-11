@@ -88,9 +88,8 @@ bool WaitForArrival::hasMetErrorRequirements(){
   // calculate lateral error
   const double lateral_error = sqrt(pow(dx, 2) + pow(dy, 2)) * sin(AngDiff(theta, yaw4goal));
 
-  RCLCPP_INFO(preprocessor_->node_->get_logger(), "lateral_error is %f", lateral_error);
-  // 先放宽限制，跑通程序
-  if (longitudinal_error <= 2.0 && yaw_error <= 3.14 && fabs(lateral_error)<= 0.05){
+  RCLCPP_INFO(preprocessor_->node_->get_logger(), "longitudinal_error is %f, lateral_error is %f",longitudinal_error, lateral_error);  
+  if (fabs(longitudinal_error) <= 0.05 && yaw_error <=  0.174 && fabs(lateral_error)<= 0.05){
     RCLCPP_INFO(preprocessor_->node_->get_logger(), "has met the error requirement return true");
     return true;
   }
