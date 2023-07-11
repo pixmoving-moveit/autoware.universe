@@ -81,8 +81,8 @@ bool WaitForArrival::hasMetErrorRequirements(){
   const double yaw_error = Rad2Deg(AngDiff(yaw4vehicle, yaw4goal)); 
 
   // calculate longitudinal error
-  const double dx = goal_pose.position.x - vehicle_pose.position.x;
-  const double dy = goal_pose.position.y - vehicle_pose.position.y;
+  const double dx = vehicle_pose.position.x - goal_pose.position.x;
+  const double dy = vehicle_pose.position.y - goal_pose.position.y;
   const double theta = atan2(dy, dx);
   const double longitudinal_error = sqrt(pow(dx, 2) + pow(dy, 2)) * cos(AngDiff(theta, yaw4goal));
   // calculate lateral error
