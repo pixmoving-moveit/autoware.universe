@@ -96,6 +96,7 @@ def launch_setup(context, *args, **kwargs):
                     ("~/input/odometry", "/localization/kinematic_state"),
                     ("~/output/trajectory", "/planning/scenario_planning/parking/trajectory"),
                     ("is_completed", "/planning/scenario_planning/parking/is_completed"),
+                    ("~/input/vector_map", "/map/vector_map"),
                 ],
                 parameters=[
                     freespace_planner_param,

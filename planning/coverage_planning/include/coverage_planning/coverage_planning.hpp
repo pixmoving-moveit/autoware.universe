@@ -28,6 +28,7 @@
 #include <lanelet2_extension/utility/query.hpp>
 #include <lanelet2_extension/utility/utilities.hpp>
 
+#include "coverage_planning/coverage_planning_core.hpp"
 
 namespace coverage_planning // namespace coverage_planning
 {
@@ -40,48 +41,6 @@ using geometry_msgs::msg::PoseStamped;
 using geometry_msgs::msg::TwistStamped;
 using std_msgs::msg::Int16MultiArray;
 
-/**
- * @brief struct of Point
- * 
- * @tparam T 
- */
-template<class T>
-struct Point
-{
-  T _x;
-  T _y;
-  T _z;
-  Point(T x, T y, T z):_x(x), _y(y), _z(z){};
-  Point operator +(const Point &p)
-  {
-    return Point(this->_x+p._x, this->_y+p._y, this->_z+p._z);
-  }
-  Point operator -(const Point &p)
-  {
-    return Point(this->_x-p._x, this->_y-p._y, this->_z-p._z);
-  }
-  T operator *(const Point &p)
-  {
-    return this->_x*p._x+this->_y*p._y+this->_z*p._z;
-  }
-  Point<T> operator* (const T &a)
-  {
-    return Point<T>(this->_x*a, this->_y*a, this->_z*a);
-  }
-  bool operator== (const Point &p)
-  {
-    if(this->_x==p._x&&this->_y==p._y&&this->_z==p._z)
-    {
-      return true;
-    }else{
-      return false;
-    }
-  }
-  void printPoint()
-  {
-    std::cout << "x: " << this->_x << ", y: " << this->_y << ", z: " << this->_z << std::endl;
-  }
-};
 
 struct NodeParam
 {
@@ -98,7 +57,6 @@ struct NodeParam
   double th_arrived_distance_m; // distance(in meters) between current pose and trajectory target point
   double th_stopped_velocity_mps; // maxmium velocity(in m/s) treshold to velidate a vehicle is stopped
 };
-
 
 
 class CoveragePlanning: public rclcpp::Node
@@ -123,6 +81,7 @@ private:
 
   // params
   NodeParam node_param_;
+  CoveragePlanningCore coverage_planning_core_;
 
   // variables
   PoseStamped current_pose_;
@@ -134,6 +93,7 @@ private:
   Mission current_mission_;
 
   lanelet::LaneletMapPtr global_lanelet_map_ptr_;
+  HADMapBin::ConstSharedPtr map_bin_;
   bool is_map_loaded_ = false;
 
   // functions, callback
@@ -160,17 +120,6 @@ private:
   void onGoal(const PoseStamped::ConstSharedPtr & msg);
 
   bool planTraj(const GetTrajectory::Request::SharedPtr req, GetTrajectory::Response::SharedPtr res);
-
-  void polygon2Vector(std::vector<Point<double>> &polygon_vector, lanelet::ConstPolygon3d polygon);
-  void polygons2Vectors(std::vector<std::vector<Point<double>>> &polygon_vectors, lanelet::ConstPolygons3d polygons);
-  void linestring2Vector(std::vector<Point<double>> &linestring_vector, lanelet::ConstLineString3d linestring);
-  void linestrings2Vectors(std::vector<std::vector<Point<double>>> &linestring_vectors, lanelet::ConstLineStrings3d linestrings);
-
-  std::vector<int> sortIndex(std::vector<int> index_vector);
-
-  bool ptInPolygon(const Point<double> &p, const std::vector<Point<double>> &ptPolygon);
-
-  Trajectory linestringToTrajectoryMsg(lanelet::ConstLineString3d & linestring);
 
 public:
   explicit CoveragePlanning(const rclcpp::NodeOptions & node_options);

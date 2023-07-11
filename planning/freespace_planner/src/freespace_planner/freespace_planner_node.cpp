@@ -180,6 +180,39 @@ Trajectory createTrajectory(
   return trajectory;
 }
 
+Trajectory createTrajectory(
+  const PoseStamped & current_pose, const Trajectory & input_trajectory, const double & velocity)
+{
+  Trajectory output_trajectory;
+  output_trajectory.header = current_pose.header;
+  output_trajectory.header.stamp = rclcpp::Clock().now();
+  for(size_t i=0;i<input_trajectory.points.size();i++)
+    {
+      TrajectoryPoint tp;
+      tp.pose.position.x = input_trajectory.points.at(i).pose.position.x;
+      tp.pose.position.y = input_trajectory.points.at(i).pose.position.y;
+      tp.pose.position.z = input_trajectory.points.at(i).pose.position.z;
+      tp.longitudinal_velocity_mps = velocity/3.6;
+      output_trajectory.points.push_back(tp);
+    }
+    size_t last = output_trajectory.points.size() - 1;
+    for (size_t i = 0; i < output_trajectory.points.size(); i++)
+    {
+        if (i != last)
+        {
+            double yaw = atan2(output_trajectory.points.at(i + 1).pose.position.y - output_trajectory.points.at(i).pose.position.y,
+                         output_trajectory.points.at(i + 1).pose.position.x - output_trajectory.points.at(i).pose.position.x);
+            output_trajectory.points.at(i).pose.orientation = tier4_autoware_utils::createQuaternionFromYaw(yaw);
+        }
+        else
+        {
+        output_trajectory.points.at(i).pose.orientation = output_trajectory.points.at(i - 1).pose.orientation;
+        }
+    }
+  return output_trajectory;
+}
+
+
 Trajectory createStopTrajectory(const PoseStamped & current_pose)
 {
   PlannerWaypoints waypoints;
@@ -268,6 +301,11 @@ FreespacePlannerNode::FreespacePlannerNode(const rclcpp::NodeOptions & node_opti
       "~/input/scenario", 1, std::bind(&FreespacePlannerNode::onScenario, this, _1));
     odom_sub_ = create_subscription<Odometry>(
       "~/input/odometry", 100, std::bind(&FreespacePlannerNode::onOdometry, this, _1));
+    mission_sub_ = create_subscription<Mission>(
+      "~/input/mission", 1, std::bind(&FreespacePlannerNode::onMission, this, _1));
+    map_sub_ = create_subscription<HADMapBin>(
+      "~/input/vector_map", rclcpp::QoS{1}.transient_local(),
+      std::bind(&FreespacePlannerNode::onLaneletMap, this, std::placeholders::_1));
   }
 
   // Publishers
@@ -361,6 +399,16 @@ void FreespacePlannerNode::onOdometry(const Odometry::ConstSharedPtr msg)
 void FreespacePlannerNode::onMission(const Mission::ConstSharedPtr msg)
 {
   current_mission_ = msg;
+}
+
+void FreespacePlannerNode::onLaneletMap(const HADMapBin::ConstSharedPtr msg)
+{
+  map_bin_ = msg;
+  auto lanelet_map_ptr = std::make_shared<lanelet::LaneletMap>();
+  lanelet::utils::conversion::fromBinMsg(*msg, lanelet_map_ptr);
+  global_lanelet_map_ptr_ = lanelet_map_ptr;
+  is_map_loaded_ = true;
+  RCLCPP_INFO(get_logger(), "Map Loaded.");
 }
 
 bool FreespacePlannerNode::isPlanRequired()
@@ -463,17 +511,47 @@ void FreespacePlannerNode::onTimer()
     reset();
 
     // Plan new trajectory
-    planTrajectory();
+    switch (current_mission_->free_space_sweeping_mode)
+    {
+    case Mission::BOUNDARY_SWEEPING:
+      /* code */
+      break;
+    case Mission::COVERAGE_SWEEPING:
+      RCLCPP_INFO(get_logger(), "[FreeSpace Planning using COVERAGE PLANNING!]");
+      planTrajectoryCoverage();
+      break;
+    case Mission::DUMPING_TRASH:
+      planTrajectory();
+      RCLCPP_INFO(get_logger(), "[FreeSpace Planning using DUMPING(ASTAR) PLANNING!]");
+      break;
+    case Mission::RELOADING:
+      planTrajectory();
+      RCLCPP_INFO(get_logger(), "[FreeSpace Planning using RELOADING(ASTAR) PLANNING!]");
+      break;
+    default:
+      planTrajectory();
+      RCLCPP_INFO(get_logger(), "[FreeSpace Planning using ASTAR!]");
+      break;
+    }
   }
 
+  // std::lock_guard<std::mutex> message_lock(traj_mutex_);
+  RCLCPP_INFO(get_logger(), "start validating trajectory_ size=%ld", trajectory_.points.size());
   // StopTrajectory
   if (trajectory_.points.size() <= 1) {
     return;
   }
+  RCLCPP_INFO(get_logger(), "end validating trajectory_ size");
+
 
   // Update partial trajectory
+  RCLCPP_INFO(get_logger(), "updating Target Index.");
+
   updateTargetIndex();
+  RCLCPP_INFO(get_logger(), "getting partial trajectory.");
+
   partial_trajectory_ = getPartialTrajectory(trajectory_, prev_target_index_, target_index_);
+  RCLCPP_INFO(get_logger(), "publishing message");
 
   // Publish messages
   trajectory_pub_->publish(partial_trajectory_);
@@ -518,6 +596,39 @@ void FreespacePlannerNode::planTrajectory()
     RCLCPP_INFO(get_logger(), "Can't find goal...");
     reset();
   }
+}
+
+void FreespacePlannerNode::planTrajectoryCoverage()
+{
+  RCLCPP_INFO(get_logger(), "start coverage planning");
+  if(!is_map_loaded_)
+  {
+    RCLCPP_INFO(get_logger(), "Map not loaded");
+    return;
+  }else{
+    RCLCPP_INFO(get_logger(), "Map loaded");
+  }
+  coverage_planning_core_.setMap(map_bin_);
+  geometry_msgs::msg::PoseStamped goal_pose;
+  goal_pose.pose = route_->goal_pose;
+  RCLCPP_INFO(get_logger(), "Planning"); 
+  std::tuple<Trajectory, Int16MultiArray> result = coverage_planning_core_.planTraj(goal_pose);
+  RCLCPP_INFO(get_logger(), "Got Trajectory");
+  trajectory_ =
+    createTrajectory(current_pose_, std::get<0>(result), node_param_.coverage_sweeping_velocity);
+  RCLCPP_INFO(get_logger(), "Got %ld points", trajectory_.points.size());
+  auto cover_partial_index_raw = std::get<1>(result).data;
+  std::vector<size_t> cover_partial_index;
+  RCLCPP_INFO(get_logger(), "Got %ld partial indices.", cover_partial_index_raw.size());
+  for (const auto & i : cover_partial_index_raw) {
+    cover_partial_index.push_back(i);
+  }
+  reversing_indices_ = cover_partial_index;
+  prev_target_index_ = 0;
+  target_index_ =
+    getNextTargetIndex(trajectory_.points.size(), reversing_indices_, prev_target_index_);
+  RCLCPP_INFO(get_logger(), "target index is %ld", target_index_);
+  RCLCPP_INFO(get_logger(), "End Coverage planning!");
 }
 
 void FreespacePlannerNode::reset()

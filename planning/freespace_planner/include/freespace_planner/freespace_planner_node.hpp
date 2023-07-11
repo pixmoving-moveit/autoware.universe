@@ -36,8 +36,23 @@
 #include <rclcpp/rclcpp.hpp>
 #include <vehicle_info_util/vehicle_info_util.hpp>
 
+#include <autoware_auto_planning_msgs/msg/trajectory_point.hpp>
+#include <std_msgs/msg/int16_multi_array.hpp>
+#include <autoware_auto_mapping_msgs/msg/had_map_bin.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/twist_stamped.hpp>
+
+#include <autoware_auto_planning_msgs/srv/get_trajectory.hpp>
+
+#include <lanelet2_extension/utility/message_conversion.hpp>
+#include <lanelet2_extension/utility/query.hpp>
+#include <lanelet2_extension/utility/utilities.hpp>
+
+#include "coverage_planning/coverage_planning_core.hpp"
+
 #include <autoware_auto_planning_msgs/msg/trajectory.hpp>
 #include <autoware_auto_planning_msgs/msg/mission.hpp>
+#include <autoware_auto_planning_msgs/srv/get_trajectory.hpp>
 #include <autoware_planning_msgs/msg/lanelet_route.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
@@ -61,11 +76,14 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <mutex>
 
 namespace freespace_planner
 {
+using autoware_auto_mapping_msgs::msg::HADMapBin;
 using autoware_auto_planning_msgs::msg::Mission;
 using autoware_auto_planning_msgs::msg::Trajectory;
+using autoware_auto_planning_msgs::srv::GetTrajectory;
 using autoware_planning_msgs::msg::LaneletRoute;
 using freespace_planning_algorithms::AbstractPlanningAlgorithm;
 using freespace_planning_algorithms::AstarParam;
@@ -80,6 +98,7 @@ using geometry_msgs::msg::TransformStamped;
 using geometry_msgs::msg::Twist;
 using nav_msgs::msg::OccupancyGrid;
 using nav_msgs::msg::Odometry;
+using std_msgs::msg::Int16MultiArray;
 using tier4_planning_msgs::msg::Scenario;
 
 struct NodeParam
@@ -120,6 +139,8 @@ private:
   rclcpp::Subscription<OccupancyGrid>::SharedPtr occupancy_grid_sub_;
   rclcpp::Subscription<Scenario>::SharedPtr scenario_sub_;
   rclcpp::Subscription<Odometry>::SharedPtr odom_sub_;
+  rclcpp::Subscription<Mission>::SharedPtr mission_sub_;
+  rclcpp::Subscription<HADMapBin>::SharedPtr map_sub_;
 
   rclcpp::TimerBase::SharedPtr timer_;
 
@@ -142,7 +163,12 @@ private:
   size_t target_index_;
   bool is_completed_ = false;
 
-  Mission::ConstSharedPtr current_mission_;
+  coverage_planning::CoveragePlanningCore coverage_planning_core_;
+  lanelet::LaneletMapPtr global_lanelet_map_ptr_;
+  HADMapBin::ConstSharedPtr map_bin_;
+  bool is_map_loaded_ = false;
+
+  Mission::ConstSharedPtr current_mission_ = std::make_shared<Mission>(Mission());
 
   LaneletRoute::ConstSharedPtr route_;
   OccupancyGrid::ConstSharedPtr occupancy_grid_;
@@ -161,12 +187,14 @@ private:
   void onScenario(const Scenario::ConstSharedPtr msg);
   void onOdometry(const Odometry::ConstSharedPtr msg);
   void onMission(const Mission::ConstSharedPtr msg);
+  void onLaneletMap(const HADMapBin::ConstSharedPtr msg);
 
   void onTimer();
 
   void reset();
   bool isPlanRequired();
   void planTrajectory();
+  void planTrajectoryCoverage();
   void updateTargetIndex();
   void initializePlanningAlgorithm();
 

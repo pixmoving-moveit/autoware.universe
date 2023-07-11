@@ -11,7 +11,7 @@
   <arg name="min_steer" default="-10.0"/>
   <arg name="convert_accel_cmd" default="true"/>
   <arg name="convert_brake_cmd" default="true"/>
-  <arg name="convert_steer_cmd" default="true"/>
+  <arg name="convert_steer_cmd" default="false"/>
   <arg name="input_control_cmd" default="/control/command/control_cmd"/>
   <arg name="input_odometry" default="/localization/kinematic_state"/>
   <arg name="input_steering" default="/vehicle/status/steering_status"/>

@@ -4,6 +4,7 @@
   <arg name="input_scenario" default="input_scenario"/>
   <arg name="input_odometry" default="/localization/kinematic_state"/>
   <arg name="output_trajectory" default="output_trajectory"/>
+  <arg name="input_vector_map" default="/map/vector_map"/>
   <arg name="is_completed" default="is_completed"/>
 
   <arg name="param_file" default="$(find-pkg-share freespace_planner)/config/freespace_planner.param.yaml"/>
@@ -17,6 +18,7 @@
     <remap from="~/input/scenario" to="$(var input_scenario)"/>
     <remap from="~/input/odometry" to="$(var input_odometry)"/>
     <remap from="~/output/trajectory" to="$(var output_trajectory)"/>
+    <remap from="~/input/vector_map" to="$(var input_vector_map)"/>
     <remap from="is_completed" to="$(var is_completed)"/>
     <param from="$(var param_file)"/>
     <param from="$(var vehicle_info_param_file)"/>
