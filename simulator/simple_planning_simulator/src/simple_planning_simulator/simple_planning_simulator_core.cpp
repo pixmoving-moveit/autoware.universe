@@ -231,6 +231,9 @@ void SimplePlanningSimulator::initialize_vehicle_model()
   } else if (vehicle_model_type_str == "IDEAL_STEER_VEL_FOR_4WS") {
     vehicle_model_type_ = VehicleModelType::IDEAL_STEER_VEL_FOR_4WS;
     vehicle_model_ptr_ = std::make_shared<SimModelIdealSteerVelFor4WS>(wheelbase);
+  } else if (vehicle_model_type_str == "IDEAL_STEER_ACC_GEARED_FOR_4WS") {
+    vehicle_model_type_ = VehicleModelType::IDEAL_STEER_ACC_GEARED_FOR_4WS;
+    vehicle_model_ptr_ = std::make_shared<SimModelIdealSteerAccGearedFor4WS>(wheelbase);
   } else {
     throw std::invalid_argument("Invalid vehicle_model_type: " + vehicle_model_type_str);
   }
@@ -381,6 +384,9 @@ void SimplePlanningSimulator::set_input(const AckermannControlCommand & cmd)
   } else if (  // NOLINT
     vehicle_model_type_ == VehicleModelType::IDEAL_STEER_VEL_FOR_4WS) {
     input << vel, steer;
+  } else if (  // NOLINT
+    vehicle_model_type_ == VehicleModelType::IDEAL_STEER_ACC_GEARED_FOR_4WS) {
+    input << acc, steer;
   }
   vehicle_model_ptr_->setInput(input);
 }
@@ -480,6 +486,9 @@ void SimplePlanningSimulator::set_initial_state(const Pose & pose, const Twist &
   } else if (  // NOLINT
     vehicle_model_type_ == VehicleModelType::IDEAL_STEER_VEL_FOR_4WS) {
     state << x, y, yaw;
+  } else if (  // NOLINT
+    vehicle_model_type_ == VehicleModelType::IDEAL_STEER_ACC_GEARED_FOR_4WS) {
+    state << x, y, yaw, vx;
   }
   vehicle_model_ptr_->setState(state);
 
