@@ -75,7 +75,6 @@ MissionPlanner::MissionPlanner(const rclcpp::NodeOptions & options)
   plugin_loader_("mission_planner", "mission_planner::PlannerPlugin"),
   tf_buffer_(get_clock()),
   tf_listener_(tf_buffer_),
-  original_route_(nullptr),
   normal_route_(nullptr)
 {
   map_frame_ = declare_parameter<std::string>("map_frame");
@@ -101,6 +100,8 @@ MissionPlanner::MissionPlanner(const rclcpp::NodeOptions & options)
   const auto adaptor = component_interface_utils::NodeAdaptor(this);
   adaptor.init_pub(pub_state_);
   adaptor.init_pub(pub_route_);
+  adaptor.init_pub(pub_normal_route_);
+  adaptor.init_pub(pub_mrm_route_);
   adaptor.init_srv(srv_clear_route_, this, &MissionPlanner::on_clear_route);
   adaptor.init_srv(srv_set_route_, this, &MissionPlanner::on_set_route);
   adaptor.init_srv(srv_set_route_points_, this, &MissionPlanner::on_set_route_points);
@@ -163,6 +164,7 @@ void MissionPlanner::change_route(const LaneletRoute & route)
 
   arrival_checker_.set_goal(goal);
   pub_route_->publish(route);
+  pub_normal_route_->publish(route);
   pub_marker_->publish(planner_->visualize(route));
   planner_->updateRoute(route);
 
@@ -289,7 +291,6 @@ void MissionPlanner::on_set_route(
   // Update route.
   change_route(route);
   change_state(RouteState::Message::SET);
-  original_route_ = std::make_shared<LaneletRoute>(route);
   res->status.success = true;
 }
 
@@ -325,7 +326,6 @@ void MissionPlanner::on_set_route_points(
   // Update route.
   change_route(route);
   change_state(RouteState::Message::SET);
-  original_route_ = std::make_shared<LaneletRoute>(route);
   res->status.success = true;
 }
 
@@ -351,8 +351,45 @@ void MissionPlanner::on_clear_mrm_route(
 
 void MissionPlanner::on_modified_goal(const ModifiedGoal::Message::ConstSharedPtr msg)
 {
-  // TODO(Yutaka Shimizu): reroute if the goal is outside the lane.
-  arrival_checker_.modify_goal(*msg);
+  if (state_.state != RouteState::Message::SET) {
+    RCLCPP_ERROR(get_logger(), "The route hasn't set yet. Cannot reroute.");
+    return;
+  }
+  if (!planner_->ready()) {
+    RCLCPP_ERROR(get_logger(), "The planner is not ready.");
+    return;
+  }
+  if (!odometry_) {
+    RCLCPP_ERROR(get_logger(), "The vehicle pose is not received.");
+    return;
+  }
+  if (!normal_route_) {
+    RCLCPP_ERROR(get_logger(), "Normal route has not set yet.");
+    return;
+  }
+
+  if (normal_route_->uuid == msg->uuid) {
+    // set to changing state
+    change_state(RouteState::Message::CHANGING);
+
+    const std::vector<geometry_msgs::msg::Pose> empty_waypoints;
+    auto new_route =
+      create_route(msg->header, empty_waypoints, msg->pose, normal_route_->allow_modification);
+    // create_route generate new uuid, so set the original uuid again to keep that.
+    new_route.uuid = msg->uuid;
+    if (new_route.segments.empty()) {
+      change_route(*normal_route_);
+      change_state(RouteState::Message::SET);
+      RCLCPP_ERROR(get_logger(), "The planned route is empty.");
+      return;
+    }
+
+    change_route(new_route);
+    change_state(RouteState::Message::SET);
+    return;
+  }
+
+  RCLCPP_ERROR(get_logger(), "Goal uuid is incorrect.");
 }
 
 void MissionPlanner::on_change_route(
@@ -394,7 +431,7 @@ void MissionPlanner::on_change_route(
 
   // check route safety
   if (checkRerouteSafety(*normal_route_, new_route)) {
-    // sucess to reroute
+    // success to reroute
     change_route(new_route);
     res->status.success = true;
     change_state(RouteState::Message::SET);
@@ -448,7 +485,7 @@ void MissionPlanner::on_change_route_points(
 
   // check route safety
   if (checkRerouteSafety(*normal_route_, new_route)) {
-    // sucess to reroute
+    // success to reroute
     change_route(new_route);
     res->status.success = true;
     change_state(RouteState::Message::SET);

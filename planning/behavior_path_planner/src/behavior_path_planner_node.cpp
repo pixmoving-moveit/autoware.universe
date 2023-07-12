@@ -128,7 +128,7 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
     dynamic_avoidance_param_ptr_ =
       std::make_shared<DynamicAvoidanceParameters>(getDynamicAvoidanceParam());
     lane_change_param_ptr_ = std::make_shared<LaneChangeParameters>(getLaneChangeParam());
-    pull_out_param_ptr_ = std::make_shared<PullOutParameters>(getPullOutParam());
+    start_planner_param_ptr_ = std::make_shared<StartPlannerParameters>(getStartPlannerParam());
     goal_planner_param_ptr_ = std::make_shared<GoalPlannerParameters>(getGoalPlannerParam());
     side_shift_param_ptr_ = std::make_shared<SideShiftParameters>(getSideShiftParam());
     avoidance_by_lc_param_ptr_ = std::make_shared<AvoidanceByLCParameters>(
@@ -191,10 +191,11 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
       "GoalPlanner", create_publisher<Path>(path_candidate_name_space + "goal_planner", 1));
     bt_manager_->registerSceneModule(goal_planner);
 
-    auto pull_out_module = std::make_shared<PullOutModule>("PullOut", *this, pull_out_param_ptr_);
+    auto start_planner_module =
+      std::make_shared<StartPlannerModule>("StartPlanner", *this, start_planner_param_ptr_);
     path_candidate_publishers_.emplace(
-      "PullOut", create_publisher<Path>(path_candidate_name_space + "pull_out", 1));
-    bt_manager_->registerSceneModule(pull_out_module);
+      "StartPlanner", create_publisher<Path>(path_candidate_name_space + "start_planner", 1));
+    bt_manager_->registerSceneModule(start_planner_module);
 
     bt_manager_->createBehaviorTree();
   }
@@ -219,14 +220,14 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
         module_name, create_publisher<Path>(path_reference_name_space + module_name, 1));
     };
 
-    if (p.config_pull_out.enable_module) {
-      auto manager = std::make_shared<PullOutModuleManager>(
-        this, "pull_out", p.config_pull_out, pull_out_param_ptr_);
+    if (p.config_start_planner.enable_module) {
+      auto manager = std::make_shared<StartPlannerModuleManager>(
+        this, "start_planner", p.config_start_planner, start_planner_param_ptr_);
       planner_manager_->registerSceneModuleManager(manager);
       path_candidate_publishers_.emplace(
-        "pull_out", create_publisher<Path>(path_candidate_name_space + "pull_out", 1));
+        "start_planner", create_publisher<Path>(path_candidate_name_space + "start_planner", 1));
       path_reference_publishers_.emplace(
-        "pull_out", create_publisher<Path>(path_reference_name_space + "pull_out", 1));
+        "start_planner", create_publisher<Path>(path_reference_name_space + "start_planner", 1));
     }
 
     if (p.config_goal_planner.enable_module) {
@@ -364,6 +365,7 @@ BehaviorPathPlannerParameters BehaviorPathPlannerNode::getCommonParam()
   const auto get_scene_module_manager_param = [&](std::string && ns) {
     ModuleConfigParameters config;
     config.enable_module = declare_parameter<bool>(ns + "enable_module");
+    config.enable_rtc = declare_parameter<bool>(ns + "enable_rtc");
     config.enable_simultaneous_execution_as_approved_module =
       declare_parameter<bool>(ns + "enable_simultaneous_execution_as_approved_module");
     config.enable_simultaneous_execution_as_candidate_module =
@@ -373,7 +375,7 @@ BehaviorPathPlannerParameters BehaviorPathPlannerNode::getCommonParam()
     return config;
   };
 
-  p.config_pull_out = get_scene_module_manager_param("pull_out.");
+  p.config_start_planner = get_scene_module_manager_param("start_planner.");
   p.config_goal_planner = get_scene_module_manager_param("goal_planner.");
   p.config_side_shift = get_scene_module_manager_param("side_shift.");
   p.config_lane_change_left = get_scene_module_manager_param("lane_change_left.");
@@ -480,6 +482,8 @@ BehaviorPathPlannerParameters BehaviorPathPlannerNode::getCommonParam()
   p.lateral_distance_max_threshold = declare_parameter<double>("lateral_distance_max_threshold");
   p.longitudinal_distance_min_threshold =
     declare_parameter<double>("longitudinal_distance_min_threshold");
+  p.longitudinal_velocity_delta_time =
+    declare_parameter<double>("longitudinal_velocity_delta_time");
 
   p.expected_front_deceleration = declare_parameter<double>("expected_front_deceleration");
   p.expected_rear_deceleration = declare_parameter<double>("expected_rear_deceleration");
@@ -566,6 +570,8 @@ AvoidanceParameters BehaviorPathPlannerNode::getAvoidanceParam()
       declare_parameter<bool>(ns + "enable_force_avoidance_for_stopped_vehicle");
     p.enable_safety_check = declare_parameter<bool>(ns + "enable_safety_check");
     p.enable_yield_maneuver = declare_parameter<bool>(ns + "enable_yield_maneuver");
+    p.enable_yield_maneuver_during_shifting =
+      declare_parameter<bool>(ns + "enable_yield_maneuver_during_shifting");
     p.disable_path_update = declare_parameter<bool>(ns + "disable_path_update");
     p.use_hatched_road_markings = declare_parameter<bool>(ns + "use_hatched_road_markings");
     p.publish_debug_marker = declare_parameter<bool>(ns + "publish_debug_marker");
@@ -576,33 +582,38 @@ AvoidanceParameters BehaviorPathPlannerNode::getAvoidanceParam()
   {
     const auto get_object_param = [&](std::string && ns) {
       ObjectParameter param{};
-      param.enable = declare_parameter<bool>("avoidance.target_object." + ns + "enable");
-      param.envelope_buffer_margin =
-        declare_parameter<double>("avoidance.target_object." + ns + "envelope_buffer_margin");
-      param.safety_buffer_lateral =
-        declare_parameter<double>("avoidance.target_object." + ns + "safety_buffer_lateral");
+      param.enable = declare_parameter<bool>(ns + "enable");
+      param.moving_speed_threshold = declare_parameter<double>(ns + "moving_speed_threshold");
+      param.moving_time_threshold = declare_parameter<double>(ns + "moving_time_threshold");
+      param.max_expand_ratio = declare_parameter<double>(ns + "max_expand_ratio");
+      param.envelope_buffer_margin = declare_parameter<double>(ns + "envelope_buffer_margin");
+      param.safety_buffer_lateral = declare_parameter<double>(ns + "safety_buffer_lateral");
       param.safety_buffer_longitudinal =
-        declare_parameter<double>("avoidance.target_object." + ns + "safety_buffer_longitudinal");
+        declare_parameter<double>(ns + "safety_buffer_longitudinal");
       return param;
     };
 
-    p.object_parameters.emplace(ObjectClassification::MOTORCYCLE, get_object_param("motorcycle."));
-    p.object_parameters.emplace(ObjectClassification::CAR, get_object_param("car."));
-    p.object_parameters.emplace(ObjectClassification::TRUCK, get_object_param("truck."));
-    p.object_parameters.emplace(ObjectClassification::TRAILER, get_object_param("trailer."));
-    p.object_parameters.emplace(ObjectClassification::BUS, get_object_param("bus."));
-    p.object_parameters.emplace(ObjectClassification::PEDESTRIAN, get_object_param("pedestrian."));
-    p.object_parameters.emplace(ObjectClassification::BICYCLE, get_object_param("bicycle."));
-    p.object_parameters.emplace(ObjectClassification::UNKNOWN, get_object_param("unknown."));
+    const std::string ns = "avoidance.target_object.";
+    p.object_parameters.emplace(
+      ObjectClassification::MOTORCYCLE, get_object_param(ns + "motorcycle."));
+    p.object_parameters.emplace(ObjectClassification::CAR, get_object_param(ns + "car."));
+    p.object_parameters.emplace(ObjectClassification::TRUCK, get_object_param(ns + "truck."));
+    p.object_parameters.emplace(ObjectClassification::TRAILER, get_object_param(ns + "trailer."));
+    p.object_parameters.emplace(ObjectClassification::BUS, get_object_param(ns + "bus."));
+    p.object_parameters.emplace(
+      ObjectClassification::PEDESTRIAN, get_object_param(ns + "pedestrian."));
+    p.object_parameters.emplace(ObjectClassification::BICYCLE, get_object_param(ns + "bicycle."));
+    p.object_parameters.emplace(ObjectClassification::UNKNOWN, get_object_param(ns + "unknown."));
+
+    p.lower_distance_for_polygon_expansion =
+      declare_parameter<double>(ns + "lower_distance_for_polygon_expansion");
+    p.upper_distance_for_polygon_expansion =
+      declare_parameter<double>(ns + "upper_distance_for_polygon_expansion");
   }
 
   // target filtering
   {
     std::string ns = "avoidance.target_filtering.";
-    p.threshold_speed_object_is_stopped =
-      declare_parameter<double>(ns + "threshold_speed_object_is_stopped");
-    p.threshold_time_object_is_moving =
-      declare_parameter<double>(ns + "threshold_time_object_is_moving");
     p.threshold_time_force_avoidance_for_stopped_vehicle =
       declare_parameter<double>(ns + "threshold_time_force_avoidance_for_stopped_vehicle");
     p.object_ignore_distance_traffic_light =
@@ -642,6 +653,8 @@ AvoidanceParameters BehaviorPathPlannerNode::getAvoidanceParam()
     p.lateral_collision_margin = declare_parameter<double>(ns + "lateral_collision_margin");
     p.road_shoulder_safety_margin = declare_parameter<double>(ns + "road_shoulder_safety_margin");
     p.lateral_execution_threshold = declare_parameter<double>(ns + "lateral_execution_threshold");
+    p.lateral_small_shift_threshold =
+      declare_parameter<double>(ns + "lateral_small_shift_threshold");
     p.max_right_shift_length = declare_parameter<double>(ns + "max_right_shift_length");
     p.max_left_shift_length = declare_parameter<double>(ns + "max_left_shift_length");
   }
@@ -774,6 +787,12 @@ LaneChangeParameters BehaviorPathPlannerNode::getLaneChangeParam()
     declare_parameter<int>(parameter("longitudinal_acceleration_sampling_num"));
   p.lateral_acc_sampling_num =
     declare_parameter<int>(parameter("lateral_acceleration_sampling_num"));
+
+  // turn signal
+  p.min_length_for_turn_signal_activation =
+    declare_parameter<double>(parameter("min_length_for_turn_signal_activation"));
+  p.length_ratio_for_turn_signal_deactivation =
+    declare_parameter<double>(parameter("length_ratio_for_turn_signal_deactivation"));
 
   // acceleration
   p.min_longitudinal_acc = declare_parameter<double>(parameter("min_longitudinal_acc"));
@@ -1050,11 +1069,11 @@ GoalPlannerParameters BehaviorPathPlannerNode::getGoalPlannerParam()
   return p;
 }
 
-PullOutParameters BehaviorPathPlannerNode::getPullOutParam()
+StartPlannerParameters BehaviorPathPlannerNode::getStartPlannerParam()
 {
-  PullOutParameters p;
+  StartPlannerParameters p;
 
-  std::string ns = "pull_out.";
+  std::string ns = "start_planner.";
 
   p.th_arrived_distance = declare_parameter<double>(ns + "th_arrived_distance");
   p.th_stopped_velocity = declare_parameter<double>(ns + "th_stopped_velocity");
@@ -1065,12 +1084,13 @@ PullOutParameters BehaviorPathPlannerNode::getPullOutParam()
     declare_parameter<double>(ns + "collision_check_distance_from_end");
   // shift pull out
   p.enable_shift_pull_out = declare_parameter<bool>(ns + "enable_shift_pull_out");
-  p.shift_pull_out_velocity = declare_parameter<double>(ns + "shift_pull_out_velocity");
-  p.pull_out_sampling_num = declare_parameter<int>(ns + "pull_out_sampling_num");
   p.minimum_shift_pull_out_distance =
     declare_parameter<double>(ns + "minimum_shift_pull_out_distance");
-  p.maximum_lateral_jerk = declare_parameter<double>(ns + "maximum_lateral_jerk");
-  p.minimum_lateral_jerk = declare_parameter<double>(ns + "minimum_lateral_jerk");
+  p.lateral_acceleration_sampling_num =
+    declare_parameter<int>(ns + "lateral_acceleration_sampling_num");
+  p.lateral_jerk = declare_parameter<double>(ns + "lateral_jerk");
+  p.maximum_lateral_acc = declare_parameter<double>(ns + "maximum_lateral_acc");
+  p.minimum_lateral_acc = declare_parameter<double>(ns + "minimum_lateral_acc");
   p.deceleration_interval = declare_parameter<double>(ns + "deceleration_interval");
   // geometric pull out
   p.enable_geometric_pull_out = declare_parameter<bool>(ns + "enable_geometric_pull_out");
@@ -1094,10 +1114,10 @@ PullOutParameters BehaviorPathPlannerNode::getPullOutParam()
   p.ignore_distance_from_lane_end = declare_parameter<double>(ns + "ignore_distance_from_lane_end");
 
   // validation of parameters
-  if (p.pull_out_sampling_num < 1) {
+  if (p.lateral_acceleration_sampling_num < 1) {
     RCLCPP_FATAL_STREAM(
-      get_logger(), "pull_out_sampling_num must be positive integer. Given parameter: "
-                      << p.pull_out_sampling_num << std::endl
+      get_logger(), "lateral_acceleration_sampling_num must be positive integer. Given parameter: "
+                      << p.lateral_acceleration_sampling_num << std::endl
                       << "Terminating the program...");
     exit(EXIT_FAILURE);
   }
@@ -1214,9 +1234,17 @@ void BehaviorPathPlannerNode::run()
   const bool is_first_time = !(planner_data_->route_handler->isHandlerReady());
   if (route_ptr) {
     planner_data_->route_handler->setRoute(*route_ptr);
+#ifndef USE_OLD_ARCHITECTURE
+    planner_manager_->resetRootLanelet(planner_data_);
+#endif
+
+    // uuid is not changed when rerouting with modified goal,
+    // in this case do not need to rest modules.
+    const bool has_same_route_id =
+      planner_data_->prev_route_id && route_ptr->uuid == planner_data_->prev_route_id;
     // Reset behavior tree when new route is received,
     // so that the each modules do not have to care about the "route jump".
-    if (!is_first_time) {
+    if (!is_first_time && !has_same_route_id) {
       RCLCPP_DEBUG(get_logger(), "new route is received. reset behavior tree.");
 #ifdef USE_OLD_ARCHITECTURE
       bt_manager_->resetBehaviorTree();
@@ -1447,9 +1475,16 @@ void BehaviorPathPlannerNode::publishPathCandidate(
     }
 
     for (auto & module : manager->getSceneModules()) {
-      path_candidate_publishers_.at(module->name())
-        ->publish(
-          convertToPath(module->getPathCandidate(), module->isExecutionReady(), planner_data));
+      const auto & status = module->getCurrentStatus();
+      const auto candidate_path = std::invoke([&]() {
+        if (status == ModuleStatus::SUCCESS || status == ModuleStatus::FAILURE) {
+          // clear candidate path if the module is finished
+          return convertToPath(nullptr, false, planner_data);
+        }
+        return convertToPath(module->getPathCandidate(), module->isExecutionReady(), planner_data);
+      });
+
+      path_candidate_publishers_.at(module->name())->publish(candidate_path);
     }
   }
 }

@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>freespace_planner_preprocessor</name>
+  <version>0.0.0</version>
+  <description>The stage planning for parking</description>
+  <maintainer email="lxq243808918@gmail.com">lixianqiang</maintainer>
+  <license>Apache License 2.0</license>
+  <author email="lxq243808918@gmail.com">lixianqiang</author>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>autoware_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>rclcpp_components</depend>
+  
+  <depend>autoware_planning_msgs</depend>
+  <depend>autoware_adapi_v1_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>motion_utils</depend>
+  <depend>tier4_planning_msgs</depend>
+  
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+        
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
