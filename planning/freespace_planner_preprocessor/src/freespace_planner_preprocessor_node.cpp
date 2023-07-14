@@ -22,6 +22,11 @@ void Idle::Handle()
 }
 
 void ModifyGoalPose::Handle(){
+  if (preprocessor_->has_new_route_){
+    preprocessor_->SwitchTo(std::make_shared<Idle>());
+    return;
+  }
+
   Pose raw_goal_pose = preprocessor_->node_->route_ptr_->goal_pose;
   Pose modified_goal_pose = raw_goal_pose;
   if (preprocessor_->goal_type_ == GoalType::Preview) {
@@ -33,17 +38,15 @@ void ModifyGoalPose::Handle(){
   } 
   LaneletRoute route = *(preprocessor_->node_->route_ptr_);
   route.goal_pose = modified_goal_pose;
-  preprocessor_->node_->route_pub_->publish(route);
+  preprocessor_->Publish(route);
   preprocessor_->route_ = route;
   preprocessor_->SwitchTo(std::make_shared<StartUp>());
 }
 
 void StartUp::Handle(){
-  // 当第一次倒车的时候，会ARRIVED，然后卡住动不了
-  if (preprocessor_->node_->route_state_ptr_ && preprocessor_->node_->route_state_ptr_->state == RouteState::ARRIVED){
-    RouteState msg;
-    msg.state = RouteState::SET;
-    preprocessor_->node_->route_state_pub_->publish(msg);
+  if (preprocessor_->has_new_route_){
+    preprocessor_->SwitchTo(std::make_shared<Idle>());
+    return;
   }
   VelocityLimit vel;
   if (preprocessor_->goal_type_ == GoalType::Preview){
@@ -51,14 +54,17 @@ void StartUp::Handle(){
   } else {
     vel.max_velocity = 0.3;
   }
-  preprocessor_->node_->velocity_limit_pub_->publish(vel);
-  Engage msg;
-  msg.engage = true;
-  preprocessor_->node_->engage_pub_->publish(msg);
+  RouteState route_state;
+  route_state.state = RouteState::SET;
+  Engage engage;
+  engage.engage = true;
+  std_msgs::msg::Bool parking_state;
+  parking_state.data = false;
+  preprocessor_->Publish(vel);
+  preprocessor_->Publish(route_state);
+  preprocessor_->Publish(engage);
+  preprocessor_->Publish(parking_state);
   preprocessor_->SwitchTo(std::make_shared<WaitForArrival>());
-  std_msgs::msg::Bool is_parking_complete;
-  is_parking_complete.data = false;
-  preprocessor_->node_->parking_state_pub_->publish(is_parking_complete);
 }
 
 bool WaitForArrival::isCloseToDestination(){
@@ -98,26 +104,30 @@ bool WaitForArrival::hasMetErrorRequirements(){
 }
 
 void WaitForArrival::Handle(){
+  if (preprocessor_->has_new_route_){
+    preprocessor_->SwitchTo(std::make_shared<Idle>());
+    return;
+  }
   if(isCloseToDestination()){
     switch (preprocessor_->goal_type_){
       case GoalType::Ultimate: {
         if (hasMetErrorRequirements()){
           RouteState route_state;
           route_state.state = RouteState::ARRIVED;
-          std_msgs::msg::Bool is_parking_complete;
-          is_parking_complete.data = true;
-          preprocessor_->node_->route_state_pub_->publish(route_state);
-          preprocessor_->node_->parking_state_pub_->publish(is_parking_complete);
+          std_msgs::msg::Bool parking_state;
+          parking_state.data = true;
+          preprocessor_->Publish(route_state);
+          preprocessor_->Publish(parking_state);
           preprocessor_->SwitchTo(std::make_shared<Idle>());
         } else {
-          preprocessor_->SwitchTo(std::make_shared<ModifyGoalPose>());
           preprocessor_->goal_type_ = GoalType::Preview;
+          preprocessor_->SwitchTo(std::make_shared<ModifyGoalPose>());
         }
         break;
       }
       case GoalType::Preview: {
-        preprocessor_->SwitchTo(std::make_shared<ModifyGoalPose>());
         preprocessor_->goal_type_ = GoalType::Ultimate;
+        preprocessor_->SwitchTo(std::make_shared<ModifyGoalPose>());
         break;
       }
       default: {
@@ -127,28 +137,49 @@ void WaitForArrival::Handle(){
   }
 }
 
+void MessageForward::Handle(){
+  if (preprocessor_->has_new_route_) {
+    preprocessor_->Publish(*(preprocessor_->node_->route_ptr_));
+    preprocessor_->has_new_route_ = false;
+  }
+  if (preprocessor_->has_new_parking_state_) {
+    preprocessor_->Publish(*(preprocessor_->node_->parking_state_ptr_));
+    preprocessor_->has_new_parking_state_ = false;
+  }
+  return;
+}
+
 Preprocessor::Preprocessor(FreeSpacePlannerPreprocessorNode * node) :  node_(node), vehicle_stop_checker_(node){
   has_new_odom_ = false; 
   has_new_route_ = false;
-  has_new_route_state_ = false; 
+  has_new_route_state_ = false;
   state_ = nullptr;
 }
 
+void Preprocessor::Reset(){
+  VelocityLimit vel;
+  vel.max_velocity = 20.0;
+  Engage engage;
+  engage.engage = false;
+  std_msgs::msg::Bool parking_state;
+  parking_state.data = false;
+  Publish(vel);
+  Publish(engage);
+  Publish(parking_state);
+}
+
 void Preprocessor::SwitchToState(){
-  if (node_->odom_ptr_ == nullptr){
+  Reset();
+  if (node_->missions_ptr_->current_mission.free_space_sweeping_mode == Mission::RELOADING ||
+      node_->missions_ptr_->current_mission.free_space_sweeping_mode == Mission::DUMPING_TRASH) {
+    SwitchTo(std::make_shared<Idle>());
+    has_new_missions_ = false;
     return;
   }
-  if (state_->name() == "Idle"){
-    SwitchTo(std::make_shared<Idle>());
-  }
-  if (state_->name() == "ModifyGoalPose"){
-    SwitchTo(std::make_shared<Idle>());
-  }
-  if (state_->name() == "StartUp"){
-    SwitchTo(std::make_shared<Idle>());
-  }
-  if (state_->name() == "WaitForArrival"){
-    SwitchTo(std::make_shared<Idle>());
+  else {
+    SwitchTo(std::make_shared<MessageForward>());
+    has_new_missions_ = false;
+    return;
   }
 }
 
@@ -161,19 +192,37 @@ void Preprocessor::SwitchTo(std::shared_ptr<State> state) {
 }
 
 void Preprocessor::onTimer(){
-  // 主动切换状态
-  if(has_new_route_)
+  if(has_new_missions_)
   {
     SwitchToState();
   }
   state_->Handle();
 }
 
-FreeSpacePlannerPreprocessorNode::FreeSpacePlannerPreprocessorNode(const rclcpp::NodeOptions & node_options): Node("freespace_planner_preprocessor", node_options){
+void Preprocessor::Publish(LaneletRoute msg){
+  node_->route_pub_->publish(msg);
+}
 
+void Preprocessor::Publish(RouteState msg){
+  node_->route_state_pub_->publish(msg);
+}
+
+void Preprocessor::Publish(VelocityLimit msg){
+  node_->velocity_limit_pub_->publish(msg);
+}
+
+void Preprocessor::Publish(Engage msg){
+  node_->engage_pub_->publish(msg);
+}
+
+void Preprocessor::Publish(Bool msg){
+  node_->parking_state_pub_->publish(msg);
+}
+
+FreeSpacePlannerPreprocessorNode::FreeSpacePlannerPreprocessorNode(const rclcpp::NodeOptions & node_options): Node("freespace_planner_preprocessor", node_options){
   // 初始化
   preprocessor_ = std::make_shared<Preprocessor>(this);
-  preprocessor_->SwitchTo(std::make_shared<Idle>());
+  preprocessor_->SwitchTo(std::make_shared<MessageForward>());
 
   // 订阅
   route_sub_ = create_subscription<LaneletRoute>(
@@ -193,7 +242,10 @@ FreeSpacePlannerPreprocessorNode::FreeSpacePlannerPreprocessorNode(const rclcpp:
   parking_state_sub_ = create_subscription<Bool>(
     "~/input/is_completed", rclcpp::QoS{1}.transient_local(),
     std::bind(&FreeSpacePlannerPreprocessorNode::onParkingState, this, std::placeholders::_1));
-
+  missions_sub_ = create_subscription<Missions>(
+    "~/input/mission", rclcpp::QoS{1}.transient_local(), 
+    std::bind(&FreeSpacePlannerPreprocessorNode::onMissions, this, std::placeholders::_1)
+  );
   // 发布
   route_pub_ = create_publisher<LaneletRoute>(
     "~/output/route", rclcpp::QoS{1}.transient_local()
@@ -237,16 +289,23 @@ void FreeSpacePlannerPreprocessorNode::onRouteState(const RouteState::ConstShare
 void FreeSpacePlannerPreprocessorNode::onScenario(const Scenario::ConstSharedPtr msg){
   // 这里只是做中转，从scenario_selector->freespace_planner_preprocessor->freespace_planner
   scenario_ptr_ = msg;
+  preprocessor_->has_new_scenario_ = true;
   scenario_pub_->publish(*scenario_ptr_); 
 }
 
 void FreeSpacePlannerPreprocessorNode::onParkingState(const Bool::ConstSharedPtr msg){
-  // 需要发到scenario_selector那边，不让不能正常切换lane_driving模式
-  is_parking_completed_ = msg->data;
+  parking_state_ptr_ = msg;
+  preprocessor_->has_new_parking_state_ = true;
 }
 
 void FreeSpacePlannerPreprocessorNode::onEngage(const Engage::ConstSharedPtr msg){
   engage_ptr_ = msg;
+  preprocessor_->has_new_engage_ = true;
+}
+
+void FreeSpacePlannerPreprocessorNode::onMissions(const Missions::ConstSharedPtr msg){
+  missions_ptr_ = msg;
+  preprocessor_->has_new_missions_ = true;
 }
 
 void FreeSpacePlannerPreprocessorNode::onTimer(){

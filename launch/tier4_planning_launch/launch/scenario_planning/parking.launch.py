@@ -111,6 +111,7 @@ def launch_setup(context, *args, **kwargs):
                     ("~/input/scenario", "/planning/scenario_planning/scenario"),
                     ("~/input/is_completed", "/planning/scenario_planning/parking/freespace_planner/is_completed"),
                     ("~/input/engage", "/autoware/engage"),
+                    ("~/input/mission", "/planning/mission_planning/mission"),
                     ("~/output/route", "/planning/mission_planning/preprocess_route"),
                     ("~/output/route_state", "/planning/mission_planning/route_state"),
                     ("~/output/scenario", "/planning/scenario_planning/scenario/preprocessor"),
