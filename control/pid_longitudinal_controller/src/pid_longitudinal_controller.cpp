@@ -922,7 +922,16 @@ double PidLongitudinalController::applyVelocityFeedback(
   const bool is_under_control = m_current_operation_mode.mode == OperationModeState::AUTONOMOUS;
   const bool enable_integration =
     (current_vel_abs > m_current_vel_threshold_pid_integrate) && is_under_control;
-  const double error_vel_filtered = m_lpf_vel_error->filter(target_vel_abs - current_vel_abs);
+  double error_vel_filtered;
+  if (target_motion.vel * current_vel >= 0.0) {
+    error_vel_filtered = m_lpf_vel_error->filter(target_vel_abs - current_vel_abs);
+  } else {
+    if(target_motion.vel >= 0.0) {
+      error_vel_filtered = m_lpf_vel_error->filter(target_motion.vel - current_vel);
+    } else {
+      error_vel_filtered = m_lpf_vel_error->filter(current_vel - target_motion.vel);
+    }
+  }
 
   std::vector<double> pid_contributions(3);
   const double pid_acc =
