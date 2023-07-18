@@ -33,6 +33,7 @@
 #include "freespace_planning_algorithms/abstract_algorithm.hpp"
 
 #include <tier4_autoware_utils/tier4_autoware_utils.hpp>
+#include <motion_utils/resample/resample.hpp>
 
 #include <algorithm>
 #include <deque>
@@ -536,22 +537,15 @@ void FreespacePlannerNode::onTimer()
   }
 
   // std::lock_guard<std::mutex> message_lock(traj_mutex_);
-  RCLCPP_INFO(get_logger(), "start validating trajectory_ size=%ld", trajectory_.points.size());
   // StopTrajectory
   if (trajectory_.points.size() <= 1) {
     return;
   }
-  RCLCPP_INFO(get_logger(), "end validating trajectory_ size");
-
 
   // Update partial trajectory
-  RCLCPP_INFO(get_logger(), "updating Target Index.");
-
   updateTargetIndex();
-  RCLCPP_INFO(get_logger(), "getting partial trajectory.");
-
-  partial_trajectory_ = getPartialTrajectory(trajectory_, prev_target_index_, target_index_);
-  RCLCPP_INFO(get_logger(), "publishing message");
+  Trajectory partial_trajectory_raw = getPartialTrajectory(trajectory_, prev_target_index_, target_index_);
+  partial_trajectory_ = motion_utils::resampleTrajectory(partial_trajectory_raw, 0.2, false, false, false);
 
   // Publish messages
   trajectory_pub_->publish(partial_trajectory_);
@@ -621,7 +615,8 @@ void FreespacePlannerNode::planTrajectoryCoverage()
   std::vector<size_t> cover_partial_index;
   RCLCPP_INFO(get_logger(), "Got %ld partial indices.", cover_partial_index_raw.size());
   for (const auto & i : cover_partial_index_raw) {
-    cover_partial_index.push_back(i);
+    RCLCPP_INFO(get_logger(), "partial index %d", i);
+    cover_partial_index.push_back(i-1);
   }
   reversing_indices_ = cover_partial_index;
   prev_target_index_ = 0;
