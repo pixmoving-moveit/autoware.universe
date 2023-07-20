@@ -134,6 +134,7 @@ private:
   rclcpp::Publisher<PoseArray>::SharedPtr debug_pose_array_pub_;
   rclcpp::Publisher<PoseArray>::SharedPtr debug_partial_pose_array_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr parking_state_pub_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr planning_result_pub_;
 
   rclcpp::Subscription<LaneletRoute>::SharedPtr route_sub_;
   rclcpp::Subscription<OccupancyGrid>::SharedPtr occupancy_grid_sub_;
@@ -162,6 +163,8 @@ private:
   size_t prev_target_index_;
   size_t target_index_;
   bool is_completed_ = false;
+  bool is_planning_success_ = false;
+
 
   coverage_planning::CoveragePlanningCore coverage_planning_core_;
   lanelet::LaneletMapPtr global_lanelet_map_ptr_;

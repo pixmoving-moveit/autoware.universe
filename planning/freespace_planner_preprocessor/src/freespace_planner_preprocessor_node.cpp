@@ -23,6 +23,7 @@ void Idle::Handle()
 
 void ModifyGoalPose::Handle(){
   if (preprocessor_->has_new_route_){
+    preprocessor_->Reset();
     preprocessor_->SwitchTo(std::make_shared<Idle>());
     return;
   }
@@ -45,26 +46,52 @@ void ModifyGoalPose::Handle(){
 
 void StartUp::Handle(){
   if (preprocessor_->has_new_route_){
+    preprocessor_->Reset();
     preprocessor_->SwitchTo(std::make_shared<Idle>());
     return;
   }
-  VelocityLimit vel;
-  if (preprocessor_->goal_type_ == GoalType::Preview){
-    vel.max_velocity = 1.0;
-  } else {
-    vel.max_velocity = 0.3;
+  switch (current_action_) {
+    case SetParam: {
+      if (preprocessor_->has_new_planning_result_){
+        if (preprocessor_->node_->planning_result_ptr_->data == true){
+          VelocityLimit vel;
+          vel.max_velocity = (preprocessor_->goal_type_ == GoalType::Preview ) ? 1.0 :0.3;
+          RouteState route_state;
+          route_state.state = RouteState::SET;
+          std_msgs::msg::Bool parking_state;
+          parking_state.data = false;
+
+          preprocessor_->Publish(vel);
+          preprocessor_->Publish(route_state);
+          preprocessor_->Publish(parking_state);
+          current_action_ = CheckValidity;
+        }
+        preprocessor_->has_new_planning_result_ = false;
+      }
+      return;
+    }
+    case CheckValidity: {
+      Engage engage;
+      engage.engage = true;
+      if(!preprocessor_->node_->velocity_limit_ptr_) return;
+      if (preprocessor_->goal_type_ == GoalType::Preview){
+        if (preprocessor_->node_->velocity_limit_ptr_->max_velocity - 1.0 < 1e-3){
+          preprocessor_->Publish(engage);
+          preprocessor_->SwitchTo(std::make_shared<WaitForArrival>());
+        }
+      } 
+      if (preprocessor_->goal_type_ == GoalType::Ultimate){
+        if (preprocessor_->node_->velocity_limit_ptr_->max_velocity - 0.3 < 1e-3){
+          preprocessor_->Publish(engage);
+          preprocessor_->SwitchTo(std::make_shared<WaitForArrival>());
+        }
+      }
+      return;
+    }
+    default: {
+      break;
+    }
   }
-  RouteState route_state;
-  route_state.state = RouteState::SET;
-  Engage engage;
-  engage.engage = true;
-  std_msgs::msg::Bool parking_state;
-  parking_state.data = false;
-  preprocessor_->Publish(vel);
-  preprocessor_->Publish(route_state);
-  preprocessor_->Publish(engage);
-  preprocessor_->Publish(parking_state);
-  preprocessor_->SwitchTo(std::make_shared<WaitForArrival>());
 }
 
 bool WaitForArrival::isCloseToDestination(){
@@ -105,6 +132,7 @@ bool WaitForArrival::hasMetErrorRequirements(){
 
 void WaitForArrival::Handle(){
   if (preprocessor_->has_new_route_){
+    preprocessor_->Reset();
     preprocessor_->SwitchTo(std::make_shared<Idle>());
     return;
   }
@@ -146,6 +174,9 @@ void MessageForward::Handle(){
     preprocessor_->Publish(*(preprocessor_->node_->parking_state_ptr_));
     preprocessor_->has_new_parking_state_ = false;
   }
+  if (preprocessor_->has_new_planning_result_) {
+    preprocessor_->has_new_planning_result_ = false;
+  }
   return;
 }
 
@@ -169,16 +200,19 @@ void Preprocessor::Reset(){
 }
 
 void Preprocessor::SwitchToState(){
+  if (!node_->mission_ptr_) {
+    return;
+  }
   Reset();
-  if (node_->missions_ptr_->current_mission.free_space_sweeping_mode == Mission::RELOADING ||
-      node_->missions_ptr_->current_mission.free_space_sweeping_mode == Mission::DUMPING_TRASH) {
+  if (node_->mission_ptr_->free_space_sweeping_mode == Mission::RELOADING ||
+      node_->mission_ptr_->free_space_sweeping_mode == Mission::DUMPING_TRASH) {
     SwitchTo(std::make_shared<Idle>());
-    has_new_missions_ = false;
+    has_new_mission_ = false;
     return;
   }
   else {
     SwitchTo(std::make_shared<MessageForward>());
-    has_new_missions_ = false;
+    has_new_mission_ = false;
     return;
   }
 }
@@ -192,7 +226,7 @@ void Preprocessor::SwitchTo(std::shared_ptr<State> state) {
 }
 
 void Preprocessor::onTimer(){
-  if(has_new_missions_)
+  if(has_new_mission_)
   {
     SwitchToState();
   }
@@ -242,9 +276,17 @@ FreeSpacePlannerPreprocessorNode::FreeSpacePlannerPreprocessorNode(const rclcpp:
   parking_state_sub_ = create_subscription<Bool>(
     "~/input/is_completed", rclcpp::QoS{1}.transient_local(),
     std::bind(&FreeSpacePlannerPreprocessorNode::onParkingState, this, std::placeholders::_1));
-  missions_sub_ = create_subscription<Missions>(
+  planning_result_sub_ = create_subscription<Bool>(
+    "~/input/planning_result", rclcpp::QoS{1}.transient_local(),
+    std::bind(&FreeSpacePlannerPreprocessorNode::onPlanningResult, this, std::placeholders::_1)
+  );
+  mission_sub_ = create_subscription<Mission>(
     "~/input/mission", rclcpp::QoS{1}.transient_local(), 
-    std::bind(&FreeSpacePlannerPreprocessorNode::onMissions, this, std::placeholders::_1)
+    std::bind(&FreeSpacePlannerPreprocessorNode::onMission, this, std::placeholders::_1)
+  );
+  velocity_limit_sub_ = create_subscription<VelocityLimit>(
+    "~/input/velocity_limit", rclcpp::QoS{1}.transient_local(),
+    std::bind(&FreeSpacePlannerPreprocessorNode::onVelocityLimit, this, std::placeholders::_1)
   );
   // 发布
   route_pub_ = create_publisher<LaneletRoute>(
@@ -262,7 +304,7 @@ FreeSpacePlannerPreprocessorNode::FreeSpacePlannerPreprocessorNode(const rclcpp:
   engage_pub_ = create_publisher<Engage>(
     "~/output/engage", rclcpp::QoS{1}.transient_local()
   );
-  velocity_limit_pub_ = create_publisher<tier4_planning_msgs::msg::VelocityLimit>(
+  velocity_limit_pub_ = create_publisher<VelocityLimit>(
     "~/output/velocity_limit", rclcpp::QoS{1}.transient_local()
   );
   // 定时器
@@ -298,14 +340,24 @@ void FreeSpacePlannerPreprocessorNode::onParkingState(const Bool::ConstSharedPtr
   preprocessor_->has_new_parking_state_ = true;
 }
 
+void FreeSpacePlannerPreprocessorNode::onPlanningResult(const Bool::ConstSharedPtr msg){
+  planning_result_ptr_ = msg;
+  preprocessor_->has_new_planning_result_ = true;
+}
+
 void FreeSpacePlannerPreprocessorNode::onEngage(const Engage::ConstSharedPtr msg){
   engage_ptr_ = msg;
   preprocessor_->has_new_engage_ = true;
 }
 
-void FreeSpacePlannerPreprocessorNode::onMissions(const Missions::ConstSharedPtr msg){
-  missions_ptr_ = msg;
-  preprocessor_->has_new_missions_ = true;
+void FreeSpacePlannerPreprocessorNode::onMission(const Mission::ConstSharedPtr msg){
+  mission_ptr_ = msg;
+  preprocessor_->has_new_mission_ = true;
+}
+
+void FreeSpacePlannerPreprocessorNode::onVelocityLimit(const VelocityLimit::ConstSharedPtr msg){
+  velocity_limit_ptr_ = msg;
+  preprocessor_->has_new_velocity_limit_ = true;
 }
 
 void FreeSpacePlannerPreprocessorNode::onTimer(){

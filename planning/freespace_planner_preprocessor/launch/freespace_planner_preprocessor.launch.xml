@@ -6,6 +6,9 @@
   <arg name="input_is_completed" default="/planning/scenario_planning/parking/freespace_planner/is_completed"/>
   <arg name="input_odometry" default="/localization/kinematic_state"/>
   <arg name="input_mission" default="/planning/mission_planning/mission"/>
+  <arg name="input_planning_result" default="/planning/scenario_planning/parking/freespace_planner/planning_result"/>
+  <arg name="input_velocity_limit" default="/planning/scenario_planning/current_max_velocity"/>
+
   <arg name="output_route" default="/planning/mission_planning/preprocess_route"/>
   <arg name="output_route_state" default="/planning/mission_planning/route_state"/>
   <arg name="output_scenario" default="/planning/scenario_planning/scenario/preprocessor"/>
@@ -21,6 +24,8 @@
       <remap from="~/input/is_completed" to="$(var input_is_completed)"/>
       <remap from="~/input/odometry" to="$(var input_odometry)"/>
       <remap from="~/input/mission" to="$(var input_mission)"/>
+      <remap from="~/input/planning_result" to="$(var input_planning_result)"/>
+      <remap from="~/input/velocity_limit" to="$(var input_velocity_limit)"/>
       <remap from="~/output/route" to="$(var output_route)"/>  
       <remap from="~/output/route_state" to="$(var output_route_state)"/>
       <remap from="~/output/scenario" to="$(var output_scenario)"/>  

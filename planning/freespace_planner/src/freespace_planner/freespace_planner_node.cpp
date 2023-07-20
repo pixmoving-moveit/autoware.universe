@@ -303,7 +303,7 @@ FreespacePlannerNode::FreespacePlannerNode(const rclcpp::NodeOptions & node_opti
     odom_sub_ = create_subscription<Odometry>(
       "~/input/odometry", 100, std::bind(&FreespacePlannerNode::onOdometry, this, _1));
     mission_sub_ = create_subscription<Mission>(
-      "~/input/mission", 1, std::bind(&FreespacePlannerNode::onMission, this, _1));
+      "~/input/mission", rclcpp::QoS{1}.transient_local(), std::bind(&FreespacePlannerNode::onMission, this, _1));
     map_sub_ = create_subscription<HADMapBin>(
       "~/input/vector_map", rclcpp::QoS{1}.transient_local(),
       std::bind(&FreespacePlannerNode::onLaneletMap, this, std::placeholders::_1));
@@ -317,6 +317,7 @@ FreespacePlannerNode::FreespacePlannerNode(const rclcpp::NodeOptions & node_opti
     debug_pose_array_pub_ = create_publisher<PoseArray>("~/debug/pose_array", qos);
     debug_partial_pose_array_pub_ = create_publisher<PoseArray>("~/debug/partial_pose_array", qos);
     parking_state_pub_ = create_publisher<std_msgs::msg::Bool>("is_completed", qos);
+    planning_result_pub_ = create_publisher<std_msgs::msg::Bool>("~/output/planning_result", qos);
   }
 
   // TF
@@ -500,7 +501,8 @@ void FreespacePlannerNode::onTimer()
     return;
   }
 
-  if (isPlanRequired()) {
+  bool is_plan_required = isPlanRequired();
+  if (is_plan_required) {
     // Stop before planning new trajectory
     const auto stop_trajectory = partial_trajectory_.points.empty()
                                    ? createStopTrajectory(current_pose_)
@@ -551,6 +553,11 @@ void FreespacePlannerNode::onTimer()
   trajectory_pub_->publish(partial_trajectory_);
   debug_pose_array_pub_->publish(trajectory2PoseArray(trajectory_));
   debug_partial_pose_array_pub_->publish(trajectory2PoseArray(partial_trajectory_));
+  if (is_plan_required) {
+    std_msgs::msg::Bool msg;
+    msg.data = is_planning_success_;
+    planning_result_pub_->publish(msg);
+  }
 }
 
 void FreespacePlannerNode::planTrajectory()
@@ -585,9 +592,10 @@ void FreespacePlannerNode::planTrajectory()
     prev_target_index_ = 0;
     target_index_ =
       getNextTargetIndex(trajectory_.points.size(), reversing_indices_, prev_target_index_);
-
+    is_planning_success_ = true;
   } else {
     RCLCPP_INFO(get_logger(), "Can't find goal...");
+    is_planning_success_ = false;
     reset();
   }
 }

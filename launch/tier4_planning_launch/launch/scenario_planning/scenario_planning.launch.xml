@@ -57,6 +57,4 @@
       </include>
     </group>
   </group>
-  <include file="$(find-pkg-share freespace_planner_preprocessor)/launch/freespace_planner_preprocessor.launch.xml">
-  </include>
 </launch>

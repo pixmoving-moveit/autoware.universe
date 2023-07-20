@@ -6,7 +6,7 @@
 #include "rclcpp/rclcpp.hpp"
 
 #include <autoware_auto_vehicle_msgs/msg/detail/engage__struct.hpp>
-#include <autoware_auto_planning_msgs/msg/missions.hpp>
+#include <autoware_auto_planning_msgs/msg/mission.hpp>
 #include <autoware_planning_msgs/msg/lanelet_route.hpp>
 #include <autoware_adapi_v1_msgs/msg/route_state.hpp>
 #include <geometry_msgs/msg/detail/quaternion__struct.hpp>
@@ -36,8 +36,8 @@ using std_msgs::msg::Bool;
 using autoware_auto_vehicle_msgs::msg::Engage;
 using motion_utils::VehicleStopChecker;
 using tier4_planning_msgs::msg::VelocityLimit;
-using autoware_auto_planning_msgs::msg::Missions;
 using autoware_auto_planning_msgs::msg::Mission;
+using tier4_planning_msgs::msg::VelocityLimit;
 
 struct Coordinate {
   double x;
@@ -133,8 +133,14 @@ class ModifyGoalPose : public State {
 };
 
 class StartUp : public State {
+  private:
+    enum Action {
+    SetParam,
+    CheckValidity,
+  } current_action_;  
   public:
     StartUp() : State("StartUp") {
+      current_action_ = SetParam;
     }
     void Handle() override;
 };
@@ -174,13 +180,15 @@ class Preprocessor : public std::enable_shared_from_this<Preprocessor> {
   void Publish(Bool msg);
 
   FreeSpacePlannerPreprocessorNode *node_;
-  bool has_new_odom_;
-  bool has_new_route_;
-  bool has_new_route_state_;
-  bool has_new_scenario_;
-  bool has_new_parking_state_;
-  bool has_new_engage_;
-  bool has_new_missions_;
+  bool has_new_odom_ = false;
+  bool has_new_route_ = false;
+  bool has_new_route_state_ = false;
+  bool has_new_scenario_ = false;
+  bool has_new_parking_state_ = false;
+  bool has_new_planning_result_ = false;
+  bool has_new_engage_ = false;
+  bool has_new_mission_ = false;
+  bool has_new_velocity_limit_ = false;
   GoalType goal_type_;
   LaneletRoute route_;
   VehicleStopChecker vehicle_stop_checker_;
@@ -196,18 +204,22 @@ private:
     rclcpp::Subscription<LaneletRoute>::SharedPtr route_sub_;
     rclcpp::Subscription<RouteState>::SharedPtr route_state_sub_;
     rclcpp::Subscription<Bool>::SharedPtr parking_state_sub_;
+    rclcpp::Subscription<Bool>::SharedPtr planning_result_sub_;
     rclcpp::Subscription<Scenario>::SharedPtr scenario_sub_;
     rclcpp::Subscription<Engage>::SharedPtr engage_sub_;
-    rclcpp::Subscription<Missions>::SharedPtr missions_sub_;
+    rclcpp::Subscription<Mission>::SharedPtr mission_sub_;
+    rclcpp::Subscription<VelocityLimit>::SharedPtr velocity_limit_sub_;
 
     void onTimer();
     void onOdometry(const Odometry::ConstSharedPtr msg);
     void onRoute(const LaneletRoute::ConstSharedPtr msg);
     void onRouteState(const RouteState::ConstSharedPtr msg);
     void onParkingState(const Bool::ConstSharedPtr msg);
+    void onPlanningResult(const Bool::ConstSharedPtr msg);
     void onScenario(const Scenario::ConstSharedPtr msg);
     void onEngage(const Engage::ConstSharedPtr msg);
-    void onMissions(const Missions::ConstSharedPtr msg);
+    void onMission(const Mission::ConstSharedPtr msg);
+    void onVelocityLimit(const VelocityLimit::ConstSharedPtr msg);
 
 public:
     explicit FreeSpacePlannerPreprocessorNode(const rclcpp::NodeOptions & node_options);
@@ -225,7 +237,9 @@ public:
     Scenario::ConstSharedPtr scenario_ptr_;
     Engage::ConstSharedPtr engage_ptr_;
     Bool::ConstSharedPtr parking_state_ptr_;
-    Missions::ConstSharedPtr missions_ptr_;
+    Bool::ConstSharedPtr planning_result_ptr_;
+    Mission::ConstSharedPtr mission_ptr_;
+    VelocityLimit::ConstSharedPtr velocity_limit_ptr_;
 };
 } // namespace freespace_planner_preprocessor
 #endif // FREESPACE_PLANNER_PREPROCESSOR_NODE_HPP_
