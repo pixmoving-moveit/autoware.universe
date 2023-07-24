@@ -3,7 +3,7 @@
   <arg name="input_parking_state"
     default="/planning/scenario_planning/parking/freespace_planner/is_completed" />
   <arg name="input_odometry" default="/localization/kinematic_state" />
-  <arg name="input_mission" default="/planning/mission_planning/mission" />
+  <arg name="input_mission" default="/planning/scenario_planning/parking/freespace_planner/mission" />
   <arg name="input_planning_result"
     default="/planning/scenario_planning/parking/freespace_planner/planning_result" />
   <arg name="output_route" default="/planning/mission_planning/preprocess_route" />
