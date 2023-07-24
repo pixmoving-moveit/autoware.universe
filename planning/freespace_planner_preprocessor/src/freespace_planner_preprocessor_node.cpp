@@ -7,8 +7,9 @@ namespace freespace_planner_preprocessor
 void MessageForward::LoadSubscribers(FreeSpacePlannerPreprocessorNode* context)
 {
   auto OnRoute = [context](const LaneletRoute::ConstSharedPtr msg) {
-    if (context->data_base.mission_ptr->free_space_sweeping_mode == Mission::RELOADING ||
-        context->data_base.mission_ptr->free_space_sweeping_mode == Mission::DUMPING_TRASH)
+    if (context->data_base.mission_ptr &&
+        (context->data_base.mission_ptr->free_space_sweeping_mode == Mission::RELOADING ||
+        context->data_base.mission_ptr->free_space_sweeping_mode == Mission::DUMPING_TRASH))
     {
       // TODO: 被激活scenario_selector会通过该回调传入数据，一旦切换为中转模式时，会直接被转发出去
       return;
@@ -16,8 +17,9 @@ void MessageForward::LoadSubscribers(FreeSpacePlannerPreprocessorNode* context)
     context->data_base.route_ptr = msg;
   };
   auto OnParkingState = [context](const Bool::ConstSharedPtr msg) {
-    if (context->data_base.mission_ptr->free_space_sweeping_mode == Mission::RELOADING ||
-        context->data_base.mission_ptr->free_space_sweeping_mode == Mission::DUMPING_TRASH)
+    if (context->data_base.mission_ptr &&
+        (context->data_base.mission_ptr->free_space_sweeping_mode == Mission::RELOADING ||
+        context->data_base.mission_ptr->free_space_sweeping_mode == Mission::DUMPING_TRASH))
     {
       // 当mission是RELOADING或者DUMPING_TRASH时，其信息由其他状态来控制发布,不作中转
       return;
