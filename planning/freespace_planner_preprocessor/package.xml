@@ -14,13 +14,12 @@
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>
   
+  <depend>autoware_auto_planning_msgs</depend>
   <depend>autoware_planning_msgs</depend>
-  <depend>autoware_adapi_v1_msgs</depend>
+  <depend>motion_utils</depend>
   <depend>tf2</depend>
   <depend>tf2_geometry_msgs</depend>
-  <depend>nav_msgs</depend>
-  <depend>motion_utils</depend>
-  <depend>tier4_planning_msgs</depend>
+  <depend>tier4_planning_msgs</depend> 
   
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

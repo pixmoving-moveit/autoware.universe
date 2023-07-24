@@ -16,7 +16,7 @@ include_directories(include)
 ament_auto_add_library(freespace_planner_preprocessor SHARED
   src/freespace_planner_preprocessor_node.cpp
 )
-ament_target_dependencies(freespace_planner_preprocessor rclcpp rclcpp_components autoware_auto_planning_msgs autoware_planning_msgs tf2 tf2_geometry_msgs autoware_adapi_v1_msgs nav_msgs motion_utils tier4_planning_msgs)
+ament_target_dependencies(freespace_planner_preprocessor rclcpp rclcpp_components autoware_auto_planning_msgs autoware_planning_msgs motion_utils tf2 tf2_geometry_msgs tier4_planning_msgs)
 
 rclcpp_components_register_node(freespace_planner_preprocessor
   PLUGIN "freespace_planner_preprocessor::FreeSpacePlannerPreprocessorNode"
@@ -38,4 +38,5 @@ endif()
 ament_auto_package(  
   INSTALL_TO_SHARE
   launch
+  config
 )

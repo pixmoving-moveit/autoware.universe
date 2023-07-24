@@ -32,6 +32,9 @@ def launch_setup(context, *args, **kwargs):
     with open(vehicle_info_param_path, "r") as f:
         vehicle_info_param = yaml.safe_load(f)["/**"]["ros__parameters"]
 
+    with open(LaunchConfiguration("freespace_planner_preprocessor_param_path").perform(context), "r") as f:
+        freespace_planner_preprocessor_param = yaml.safe_load(f)["/**"]["ros__parameters"]
+
     with open(LaunchConfiguration("freespace_planner_param_path").perform(context), "r") as f:
         freespace_planner_param = yaml.safe_load(f)["/**"]["ros__parameters"]
 
@@ -106,21 +109,16 @@ def launch_setup(context, *args, **kwargs):
                 name="freespace_planner_preprocessor",
                 remappings=[
                     ("~/input/route", "/planning/mission_planning/route"),
-                    ("~/input/route_state", "/planning/mission_planning/route_state"),
                     ("~/input/odometry", "/localization/kinematic_state"),
-                    ("~/input/scenario", "/planning/scenario_planning/scenario"),
-                    ("~/input/is_completed", "/planning/scenario_planning/parking/freespace_planner/is_completed"),
-                    ("~/input/engage", "/autoware/engage"),
+                    ("~/input/parking_state", "/planning/scenario_planning/parking/freespace_planner/is_completed"),
                     ("~/input/mission", "/planning/mission_planning/mission"),
                     ("~/input/planning_result", "/planning/scenario_planning/parking/freespace_planner/planning_result"),
-                    ("~/input/velocity_limit", "/planning/scenario_planning/current_max_velocity"),
                     ("~/output/route", "/planning/mission_planning/preprocess_route"),
-                    ("~/output/route_state", "/planning/mission_planning/route_state"),
-                    ("~/output/scenario", "/planning/scenario_planning/scenario/preprocessor"),
-                    ("~/output/is_completed", "/planning/scenario_planning/parking/is_completed"),
-                    ("~/output/engage", "/autoware/engage"),
-                    ("~/output/velocity_limit", "/planning/scenario_planning/max_velocity_default")
-                ]
+                    ("~/output/parking_state", "/planning/scenario_planning/parking/is_completed"),
+                ],
+                parameters=[
+                    freespace_planner_preprocessor_param,
+                ],
             ),
             ComposableNode(
                 package="freespace_planner",
@@ -129,7 +127,7 @@ def launch_setup(context, *args, **kwargs):
                 remappings=[
                     ("~/input/route", "/planning/mission_planning/preprocess_route"),
                     ("~/input/occupancy_grid", "costmap_generator/occupancy_grid"),
-                    ("~/input/scenario", "/planning/scenario_planning/scenario/preprocessor"),
+                    ("~/input/scenario", "/planning/scenario_planning/scenario"),
                     ("~/input/odometry", "/localization/kinematic_state"),
                     ("~/input/mission", "/planning/mission_planning/mission"),
                     ("~/output/trajectory", "/planning/scenario_planning/parking/freespace_planner/trajectory"),
