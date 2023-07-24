@@ -33,6 +33,7 @@
   <arg name="behavior_velocity_planner_module_param_paths"/>
   <!-- parking -->
   <arg name="freespace_planner_param_path"/>
+  <arg name="freespace_planner_preprocessor_param_path" default="$(find-pkg-share freespace_planner_preprocessor)/config/freespace_planner_preprocessor.param.yaml"/>
   <!-- motion -->
   <arg name="obstacle_avoidance_planner_param_path"/>
   <arg name="path_sampler_param_path"/>

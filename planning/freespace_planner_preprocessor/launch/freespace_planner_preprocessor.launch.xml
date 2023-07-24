@@ -1,37 +1,27 @@
 <launch>
-  <arg name="input_route" default="/planning/mission_planning/route"/>
-  <arg name="input_route_state" default="/planning/mission_planning/route_state"/>
-  <arg name="input_scenario" default="/planning/scenario_planning/scenario"/>
-  <arg name="input_engage" default="/autoware/engage"/>
-  <arg name="input_is_completed" default="/planning/scenario_planning/parking/freespace_planner/is_completed"/>
-  <arg name="input_odometry" default="/localization/kinematic_state"/>
-  <arg name="input_mission" default="/planning/mission_planning/mission"/>
-  <arg name="input_planning_result" default="/planning/scenario_planning/parking/freespace_planner/planning_result"/>
-  <arg name="input_velocity_limit" default="/planning/scenario_planning/current_max_velocity"/>
+  <arg name="input_route" default="/planning/mission_planning/route" />
+  <arg name="input_parking_state"
+    default="/planning/scenario_planning/parking/freespace_planner/is_completed" />
+  <arg name="input_odometry" default="/localization/kinematic_state" />
+  <arg name="input_mission" default="/planning/mission_planning/mission" />
+  <arg name="input_planning_result"
+    default="/planning/scenario_planning/parking/freespace_planner/planning_result" />
+  <arg name="output_route" default="/planning/mission_planning/preprocess_route" />
+  <arg name="output_parking_state" default="/planning/scenario_planning/parking/is_completed" />
 
-  <arg name="output_route" default="/planning/mission_planning/preprocess_route"/>
-  <arg name="output_route_state" default="/planning/mission_planning/route_state"/>
-  <arg name="output_scenario" default="/planning/scenario_planning/scenario/preprocessor"/>
-  <arg name="output_is_completed" default="/planning/scenario_planning/parking/is_completed"/>
-  <arg name="output_engage" default="/autoware/engage"/>
-  <arg name="output_velocity_limit" default="/planning/scenario_planning/max_velocity_default"/>
+  <arg name="config_path"
+    default="$(find-pkg-share freespace_planner_preprocessor)/config/freespace_planner_preprocessor.param.yaml" />
 
-  <node pkg="freespace_planner_preprocessor" exec="freespace_planner_preprocessor_node" name="freespace_planner_preprocessor" output="screen">
-      <remap from="~/input/route" to="$(var input_route)"/>
-      <remap from="~/input/route_state" to="$(var input_route_state)"/>
-      <remap from="~/input/scenario" to="$(var input_scenario)"/>
-      <remap from="~/input/engage" to="$(var input_engage)"/>
-      <remap from="~/input/is_completed" to="$(var input_is_completed)"/>
-      <remap from="~/input/odometry" to="$(var input_odometry)"/>
-      <remap from="~/input/mission" to="$(var input_mission)"/>
-      <remap from="~/input/planning_result" to="$(var input_planning_result)"/>
-      <remap from="~/input/velocity_limit" to="$(var input_velocity_limit)"/>
-      <remap from="~/output/route" to="$(var output_route)"/>  
-      <remap from="~/output/route_state" to="$(var output_route_state)"/>
-      <remap from="~/output/scenario" to="$(var output_scenario)"/>  
-      <remap from="~/output/engage" to="$(var output_engage)"/>
-      <remap from="~/output/is_completed" to="$(var output_is_completed)"/> 
-      <remap from="~/output/velocity_limit" to="$(var output_velocity_limit)"/> 
+  <node pkg="freespace_planner_preprocessor" exec="freespace_planner_preprocessor_node"
+    name="freespace_planner_preprocessor" output="screen">
+    <remap from="~/input/route" to="$(var input_route)" />
+    <remap from="~/input/parking_state" to="$(var input_parking_state)" />
+    <remap from="~/input/odometry" to="$(var input_odometry)" />
+    <remap from="~/input/mission" to="$(var input_mission)" />
+    <remap from="~/input/planning_result" to="$(var input_planning_result)" />
+    <remap from="~/output/route" to="$(var output_route)" />
+    <remap from="~/output/parking_state" to="$(var output_parking_state)" />
 
+    <param from="$(var config_path)" />
   </node>
 </launch>

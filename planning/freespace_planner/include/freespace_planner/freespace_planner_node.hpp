@@ -122,6 +122,16 @@ struct NodeParam
   bool replan_when_course_out;
 };
 
+struct PlannerResult 
+{
+  enum class FailureReason {
+    NONE,
+    TIME_OUT,
+    UNREACHABLE,
+  } failure_reason;
+  bool is_success;
+};
+
 class FreespacePlannerNode : public rclcpp::Node
 {
 public:
@@ -134,7 +144,6 @@ private:
   rclcpp::Publisher<PoseArray>::SharedPtr debug_pose_array_pub_;
   rclcpp::Publisher<PoseArray>::SharedPtr debug_partial_pose_array_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr parking_state_pub_;
-  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr planning_result_pub_;
 
   rclcpp::Subscription<LaneletRoute>::SharedPtr route_sub_;
   rclcpp::Subscription<OccupancyGrid>::SharedPtr occupancy_grid_sub_;
@@ -163,7 +172,6 @@ private:
   size_t prev_target_index_;
   size_t target_index_;
   bool is_completed_ = false;
-  bool is_planning_success_ = false;
 
 
   coverage_planning::CoveragePlanningCore coverage_planning_core_;
@@ -200,6 +208,7 @@ private:
   void planTrajectoryCoverage();
   void updateTargetIndex();
   void initializePlanningAlgorithm();
+  void HandlePlannerResult(const bool* result = nullptr, const double* cost_time = nullptr);
 
   TransformStamped getTransform(const std::string & from, const std::string & to);
 };

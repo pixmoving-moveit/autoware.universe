@@ -317,7 +317,6 @@ FreespacePlannerNode::FreespacePlannerNode(const rclcpp::NodeOptions & node_opti
     debug_pose_array_pub_ = create_publisher<PoseArray>("~/debug/pose_array", qos);
     debug_partial_pose_array_pub_ = create_publisher<PoseArray>("~/debug/partial_pose_array", qos);
     parking_state_pub_ = create_publisher<std_msgs::msg::Bool>("is_completed", qos);
-    planning_result_pub_ = create_publisher<std_msgs::msg::Bool>("~/output/planning_result", qos);
   }
 
   // TF
@@ -501,8 +500,7 @@ void FreespacePlannerNode::onTimer()
     return;
   }
 
-  bool is_plan_required = isPlanRequired();
-  if (is_plan_required) {
+  if (isPlanRequired()) {
     // Stop before planning new trajectory
     const auto stop_trajectory = partial_trajectory_.points.empty()
                                    ? createStopTrajectory(current_pose_)
@@ -541,6 +539,7 @@ void FreespacePlannerNode::onTimer()
   // std::lock_guard<std::mutex> message_lock(traj_mutex_);
   // StopTrajectory
   if (trajectory_.points.size() <= 1) {
+    HandlePlannerResult();
     return;
   }
 
@@ -553,11 +552,7 @@ void FreespacePlannerNode::onTimer()
   trajectory_pub_->publish(partial_trajectory_);
   debug_pose_array_pub_->publish(trajectory2PoseArray(trajectory_));
   debug_partial_pose_array_pub_->publish(trajectory2PoseArray(partial_trajectory_));
-  if (is_plan_required) {
-    std_msgs::msg::Bool msg;
-    msg.data = is_planning_success_;
-    planning_result_pub_->publish(msg);
-  }
+  HandlePlannerResult();
 }
 
 void FreespacePlannerNode::planTrajectory()
@@ -584,18 +579,17 @@ void FreespacePlannerNode::planTrajectory()
 
   RCLCPP_INFO(get_logger(), "Freespace planning: %f [s]", (end - start).seconds());
 
+  const double cost_time = (end - start).seconds();
+  HandlePlannerResult(&result, &cost_time);
   if (result) {
     RCLCPP_INFO(get_logger(), "Found goal!");
     trajectory_ =
       createTrajectory(current_pose_, algo_->getWaypoints(), node_param_.waypoints_velocity);
     reversing_indices_ = getReversingIndices(trajectory_);
     prev_target_index_ = 0;
-    target_index_ =
-      getNextTargetIndex(trajectory_.points.size(), reversing_indices_, prev_target_index_);
-    is_planning_success_ = true;
+    target_index_ = getNextTargetIndex(trajectory_.points.size(), reversing_indices_, prev_target_index_);
   } else {
     RCLCPP_INFO(get_logger(), "Can't find goal...");
-    is_planning_success_ = false;
     reset();
   }
 }
@@ -679,6 +673,42 @@ void FreespacePlannerNode::initializePlanningAlgorithm()
     throw std::runtime_error("No such algorithm named " + algo_name + " exists.");
   }
   RCLCPP_INFO_STREAM(get_logger(), "initialize planning algorithm: " << algo_name);
+}
+
+void FreespacePlannerNode::HandlePlannerResult(const bool* result, const double* cost_time)
+{
+  static double time_limit;
+  static bool has_initialized = false;
+  static bool has_filled_result = false;
+  static PlannerResult planner_result;
+  static rclcpp::Publisher<std_msgs::msg::Int16MultiArray>::SharedPtr planning_result_pub =
+      create_publisher<std_msgs::msg::Int16MultiArray>("~/output/planning_result", rclcpp::QoS{ 1 }.transient_local());
+
+  if (has_initialized)
+  {
+    time_limit = getPlannerCommonParam().time_limit;
+  }
+
+  if (result && cost_time)
+  {
+    planner_result.is_success = *result;
+    if (!planner_result.is_success)
+    {
+      planner_result.failure_reason =
+          *cost_time > time_limit ? PlannerResult::FailureReason::TIME_OUT : PlannerResult::FailureReason::UNREACHABLE;
+    }
+    has_filled_result = true;
+    return;
+  }
+
+  if (has_filled_result)
+  {
+    std_msgs::msg::Int16MultiArray msg;
+    msg.data = { planner_result.is_success, static_cast<int16_t>(planner_result.failure_reason) };
+    planning_result_pub->publish(msg);
+    has_filled_result = false;
+    return;
+  }
 }
 }  // namespace freespace_planner
 
