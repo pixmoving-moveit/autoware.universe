@@ -485,6 +485,9 @@ void FreespacePlannerNode::onTimer()
 
   if (!isActive(scenario_)) {
     reset();
+    if (route_) {
+      route_ = nullptr;
+    }
     return;
   }
 
