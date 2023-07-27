@@ -49,7 +49,7 @@ double SimModelIdealSteerAccGearedFor4WS::getAx()
 }
 double SimModelIdealSteerAccGearedFor4WS::getWz()
 {
-  return state_(IDX::VX) * std::tan(input_(IDX_U::STEER_DES)) / wheelbase_;
+  return 2 * state_(IDX::VX) * std::tan(input_(IDX_U::STEER_DES)) / wheelbase_;
 }
 double SimModelIdealSteerAccGearedFor4WS::getSteer()
 {

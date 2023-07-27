@@ -27,7 +27,7 @@ double SimModelIdealSteerVelFor4WS::getVy() { return 0.0; }
 double SimModelIdealSteerVelFor4WS::getAx() { return current_ax_; }
 double SimModelIdealSteerVelFor4WS::getWz()
 {
-  return input_(IDX_U::VX_DES) * std::tan(input_(IDX_U::STEER_DES)) / wheelbase_;
+  return input_(2 * IDX_U::VX_DES) * std::tan(input_(IDX_U::STEER_DES)) / wheelbase_;
 }
 double SimModelIdealSteerVelFor4WS::getSteer() { return input_(IDX_U::STEER_DES); }
 void SimModelIdealSteerVelFor4WS::update(const double & dt)
