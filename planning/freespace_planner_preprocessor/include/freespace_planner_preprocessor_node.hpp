@@ -7,6 +7,7 @@
 
 #include <autoware_auto_planning_msgs/msg/mission.hpp>
 #include <autoware_auto_vehicle_msgs/msg/engage.hpp>
+#include <autoware_auto_vehicle_msgs/msg/velocity_report.hpp>
 #include <autoware_planning_msgs/msg/lanelet_route.hpp>
 #include <geometry_msgs/msg/pose.hpp>
 #include <nav_msgs/msg/odometry.hpp>
@@ -31,6 +32,7 @@ class FreeSpacePlannerPreprocessorNode;
 
 using autoware_auto_planning_msgs::msg::Mission;
 using autoware_auto_vehicle_msgs::msg::Engage;
+using autoware_auto_vehicle_msgs::msg::VelocityReport;
 using autoware_planning_msgs::msg::LaneletRoute;
 using geometry_msgs::msg::Pose;
 using motion_utils::VehicleStopChecker;
@@ -59,6 +61,8 @@ struct ContextData
   Pose goal_pose;
   GoalType goal_type;
 
+  Pose sweeping_destination;
+
   Pose station;
   Pose garbage_dump;
   Pose supply_station;
@@ -68,7 +72,8 @@ struct ContextData
   size_t index_of_preset_point;
 
   int plan_count;
-  double current_max_velocity;
+  double current_velocity_limit;
+  double current_velocity;
 };
 /* *************************************************************************************************
  */
@@ -236,7 +241,7 @@ public:
   bool engage(bool button);
   bool SetVelocityLimit(double velocity);
   bool LoadStationInfo();
-
+  bool IsPendingMission(Mission::ConstSharedPtr & mission_ptr);
   ContextData data_base;
 
   rclcpp::Publisher<LaneletRoute>::SharedPtr route_pub_;

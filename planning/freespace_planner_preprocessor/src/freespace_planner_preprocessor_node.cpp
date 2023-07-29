@@ -7,9 +7,7 @@ namespace freespace_planner_preprocessor
 void MessageForward::LoadSubscribers(FreeSpacePlannerPreprocessorNode* context)
 {
   auto OnRoute = [context](const LaneletRoute::ConstSharedPtr msg) {
-    if (context->data_base.mission_ptr &&
-        (context->data_base.mission_ptr->free_space_sweeping_mode == Mission::RELOADING ||
-        context->data_base.mission_ptr->free_space_sweeping_mode == Mission::DUMPING_TRASH))
+    if (context->data_base.mission_ptr && context->IsPendingMission(context->data_base.mission_ptr))
     {
       // TODO: 被激活scenario_selector会通过该回调传入数据，一旦切换为中转模式时，会直接被转发出去
       return;
@@ -17,18 +15,17 @@ void MessageForward::LoadSubscribers(FreeSpacePlannerPreprocessorNode* context)
     context->data_base.route_ptr = msg;
   };
   auto OnParkingState = [context](const Bool::ConstSharedPtr msg) {
-    if (context->data_base.mission_ptr &&
-        (context->data_base.mission_ptr->free_space_sweeping_mode == Mission::RELOADING ||
-        context->data_base.mission_ptr->free_space_sweeping_mode == Mission::DUMPING_TRASH))
+    if (context->data_base.mission_ptr && context->IsPendingMission(context->data_base.mission_ptr))
     {
       // 当mission是RELOADING或者DUMPING_TRASH时，其信息由其他状态来控制发布,不作中转
       return;
     }
     context->data_base.parking_state_ptr = msg;
   };
-  route_sub_ = context->create_subscription<LaneletRoute>("~/input/route", rclcpp::QoS{ 1 }.transient_local(), OnRoute);
-  parking_state_sub_ =
-      context->create_subscription<Bool>("~/input/parking_state", rclcpp::QoS{ 1 }.transient_local(), OnParkingState);
+  route_sub_ = context->create_subscription<LaneletRoute>("~/input/route",
+                                                          rclcpp::QoS{ 1 }.reliable().transient_local(), OnRoute);
+  parking_state_sub_ = context->create_subscription<Bool>(
+      "~/input/parking_state", rclcpp::QoS{ 1 }.reliable().transient_local(), OnParkingState);
 }
 
 void MessageForward::Handle()
@@ -47,7 +44,22 @@ void MessageForward::Handle()
 
 void Idle::Handle()
 {
-  // TODO: 检查状态复位没有，如果没有，就复位
+  if (!context_->engage(false))
+  {
+    return;
+  }
+  if (context_->data_base.mission_ptr->free_space_sweeping_mode == Mission::RELOADING ||
+      context_->data_base.mission_ptr->free_space_sweeping_mode == Mission::DUMPING_TRASH)
+  {
+    std_msgs::msg::Bool msg;
+    msg.data = false;
+    context_->parking_state_pub_->publish(msg);
+    context_->SwitchTo("ModifyGoalPose");
+  }
+  else
+  {
+    context_->SwitchTo("MessageForward");
+  }
 }
 
 void ModifyGoalPose::Handle()
@@ -70,8 +82,8 @@ void ModifyGoalPose::Handle()
 void WaitPlanResult::LoadSubscribers(FreeSpacePlannerPreprocessorNode* context)
 {
   auto callback = [context](const Int16MultiArray::ConstSharedPtr msg) { context->data_base.plan_result_ptr = msg; };
-  plan_result_sub_ = context->create_subscription<Int16MultiArray>("~/input/planning_result",
-                                                                   rclcpp::QoS{ 1 }.transient_local(), callback);
+  plan_result_sub_ = context->create_subscription<Int16MultiArray>(
+      "~/input/planning_result", rclcpp::QoS{ 1 }.reliable().transient_local(), callback);
 }
 
 void WaitPlanResult::Handle()
@@ -141,15 +153,13 @@ void WaitPlanResult::Handle()
 
 void StartUp::Handle()
 {
-  // TODO：等待收到轨迹后，再启动
-  bool has_received_trajectory = true;
+  bool has_recieved_trajctory = true;
   // 设置车速，当车速设置生效后，再启动
-  bool has_worked_for_SetVelocityLimit = context_->data_base.goal_type == GoalType::Preset ?
-                                             context_->SetVelocityLimit(1.0) :
-                                             context_->SetVelocityLimit(0.3);
-  if (has_received_trajectory && has_worked_for_SetVelocityLimit)
+  bool has_set_successfully = context_->data_base.goal_type == GoalType::Preset ? context_->SetVelocityLimit(1.0) :
+                                                                                  context_->SetVelocityLimit(0.3);
+  bool has_started = context_->engage(true);
+  if (has_recieved_trajctory && has_set_successfully && has_started)
   {
-    context_->engage(true);
     context_->SwitchTo("WaitForArrived");
   }
 }
@@ -245,7 +255,7 @@ FreeSpacePlannerPreprocessorNode::FreeSpacePlannerPreprocessorNode(const rclcpp:
   // 订阅
   {
     mission_sub_ = create_subscription<Mission>(
-        "~/input/mission", rclcpp::QoS{ 1 }.transient_local(),
+        "~/input/mission", rclcpp::QoS{ 1 }.reliable().transient_local(),
         std::bind(&FreeSpacePlannerPreprocessorNode::OnMission, this, std::placeholders::_1));
     odometry_sub_ = create_subscription<Odometry>(
         "~/input/odometry", rclcpp::QoS{ 1 }.durability_volatile(),
@@ -253,8 +263,9 @@ FreeSpacePlannerPreprocessorNode::FreeSpacePlannerPreprocessorNode(const rclcpp:
   }
   // 发布
   {
-    route_pub_ = create_publisher<LaneletRoute>("~/output/route", rclcpp::QoS{ 1 }.transient_local());
-    parking_state_pub_ = create_publisher<Bool>("~/output/parking_state", rclcpp::QoS{ 1 }.transient_local());
+    route_pub_ = create_publisher<LaneletRoute>("~/output/route", rclcpp::QoS{ 1 }.reliable().transient_local());
+    parking_state_pub_ =
+        create_publisher<Bool>("~/output/parking_state", rclcpp::QoS{ 1 }.reliable().transient_local());
   }
   // 定时器
   {
@@ -314,8 +325,7 @@ void FreeSpacePlannerPreprocessorNode::SwitchTo(const std::string name)
 
 void FreeSpacePlannerPreprocessorNode::SwitchState()
 {
-  if (data_base.mission_ptr->free_space_sweeping_mode != Mission::RELOADING &&
-      data_base.mission_ptr->free_space_sweeping_mode != Mission::DUMPING_TRASH)
+  if (!IsPendingMission(data_base.mission_ptr))
   {
     SwitchTo("MessageForward");
     return;
@@ -323,6 +333,19 @@ void FreeSpacePlannerPreprocessorNode::SwitchState()
 
   // TODO：创建临时发布者,发布话题给激活scenario_selector
   auto tmp_pub = create_publisher<LaneletRoute>("/planning/mission_planning/route", rclcpp::QoS{ 1 }.transient_local());
+
+  if (data_base.mission_ptr->free_space_sweeping_mode == Mission::COVERAGE_SWEEPING)
+  {
+    // TODO: 激活scenario_selector的route_，让它进入freespace的场景
+    {
+      LaneletRoute route;
+      route.goal_pose = data_base.sweeping_destination;
+      tmp_pub->publish(route);
+      route_pub_->publish(route);
+    }
+    SwitchTo("Idle");
+    return;
+  }
 
   if (data_base.mission_ptr->free_space_sweeping_mode == Mission::RELOADING)
   {
@@ -337,7 +360,7 @@ void FreeSpacePlannerPreprocessorNode::SwitchState()
     data_base.preset_points = data_base.preset_points_of_supply_station;
     data_base.goal_type = GoalType::Preset;
     data_base.index_of_preset_point = 0;
-    SwitchTo("ModifyGoalPose");
+    SwitchTo("Idle");
     return;
   }
 
@@ -354,43 +377,62 @@ void FreeSpacePlannerPreprocessorNode::SwitchState()
     data_base.preset_points = data_base.preset_points_of_garbage_dump;
     data_base.goal_type = GoalType::Preset;
     data_base.index_of_preset_point = 0;
-    SwitchTo("ModifyGoalPose");
+    SwitchTo("Idle");
     return;
   }
 }
 
 bool FreeSpacePlannerPreprocessorNode::engage(bool button)
 {
-  static auto engage_pub = create_publisher<Engage>("/autoware/engage", rclcpp::QoS{ 1 }.transient_local());
-  Engage msg;
-  msg.engage = button;
-  if (button == false)
+  static auto engage_pub = create_publisher<Engage>("/autoware/engage", rclcpp::QoS{ 1 }.reliable().transient_local());
+  static auto velocity_info_sub = create_subscription<VelocityReport>(
+      "/vehicle/status/velocity_status", rclcpp::QoS{ 1 }.reliable().durability_volatile(),
+      [this](const VelocityReport::ConstSharedPtr msg) {
+        this->data_base.current_velocity = msg->longitudinal_velocity;
+      });
+
+  if (button == false && fabs(this->data_base.current_velocity) < 1e-3)
   {
-    engage_pub->publish(msg);
     return true;
   }
-  else
+  else if (button == true && fabs(this->data_base.current_velocity) > 1e-3)
   {
-    engage_pub->publish(msg);
     return true;
   }
+
+  static auto last_time = now();
+  if ((now() - last_time).seconds() > 0.1)
+  {
+    Engage msg;
+    msg.engage = button;
+    if (button == false)
+    {
+      engage_pub->publish(msg);
+    }
+    else
+    {
+      engage_pub->publish(msg);
+    }
+  }
+  return false;
 }
 
 bool FreeSpacePlannerPreprocessorNode::SetVelocityLimit(double max_velocity)
 {
   auto OnVelocityLimit = [this](const VelocityLimit::ConstSharedPtr msg) {
-    this->data_base.current_max_velocity = msg->max_velocity;
+    this->data_base.current_velocity_limit = msg->max_velocity;
   };
-  static auto velocity_limit_sub = create_subscription<VelocityLimit>(
-      "/planning/scenario_planning/current_max_velocity", rclcpp::QoS{ 1 }.transient_local(), OnVelocityLimit);
-  static auto velocity_limit_pub = create_publisher<VelocityLimit>("/planning/scenario_planning/max_velocity",
-                                                                   rclcpp::QoS{ 1 }.durability_volatile());
-  if (fabs(data_base.current_max_velocity - max_velocity) < 1e-3)
+  static auto velocity_limit_sub =
+      create_subscription<VelocityLimit>("/planning/scenario_planning/current_max_velocity",
+                                         rclcpp::QoS{ 1 }.reliable().transient_local(), OnVelocityLimit);
+  static auto velocity_limit_pub = create_publisher<VelocityLimit>("/planning/scenario_planning/max_velocity_default",
+                                                                   rclcpp::QoS{ 1 }.reliable().transient_local());
+  if (fabs(data_base.current_velocity_limit - max_velocity) < 1e-3)
   {
     return true;
   }
   static auto last_time = now();
-  if ((now() - last_time).seconds() > 0.1)
+  if ((now() - last_time).seconds() > 1.0)
   {
     VelocityLimit vel_msg;
     vel_msg.max_velocity = max_velocity;
@@ -402,6 +444,20 @@ bool FreeSpacePlannerPreprocessorNode::SetVelocityLimit(double max_velocity)
 
 bool FreeSpacePlannerPreprocessorNode::LoadStationInfo()
 {
+  auto sd = declare_parameter<std::vector<double>>("sweeping_destination");
+  if (sd.size() % 7 != 0)
+  {
+    RCLCPP_ERROR(get_logger(), "the size of element for variable sweeping_destination size is not correct");
+    return false;
+  }
+  data_base.sweeping_destination.position.x = sd[0];
+  data_base.sweeping_destination.position.y = sd[1];
+  data_base.sweeping_destination.position.z = sd[2];
+  data_base.sweeping_destination.orientation.x = sd[3];
+  data_base.sweeping_destination.orientation.y = sd[4];
+  data_base.sweeping_destination.orientation.z = sd[5];
+  data_base.sweeping_destination.orientation.w = sd[6];
+
   auto ss = declare_parameter<std::vector<double>>("supply_station");
   if (ss.size() % 7 != 0)
   {
@@ -449,6 +505,17 @@ bool FreeSpacePlannerPreprocessorNode::LoadStationInfo()
     data_base.preset_points_of_supply_station.push_back(CalculateGlobalPose(data_base.supply_station, pp));
   }
   return true;
+}
+
+bool FreeSpacePlannerPreprocessorNode::IsPendingMission(Mission::ConstSharedPtr& mission_ptr)
+{
+  if (mission_ptr->free_space_sweeping_mode == Mission::COVERAGE_SWEEPING ||
+      mission_ptr->free_space_sweeping_mode == Mission::RELOADING ||
+      mission_ptr->free_space_sweeping_mode == Mission::DUMPING_TRASH)
+  {
+    return true;
+  }
+  return false;
 }
 
 void FreeSpacePlannerPreprocessorNode::Reset()
