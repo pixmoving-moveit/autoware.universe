@@ -52,6 +52,7 @@
 
 #include <autoware_auto_planning_msgs/msg/trajectory.hpp>
 #include <autoware_auto_planning_msgs/msg/mission.hpp>
+#include <autoware_auto_planning_msgs/msg/planner_result.hpp>
 #include <autoware_auto_planning_msgs/srv/get_trajectory.hpp>
 #include <autoware_planning_msgs/msg/lanelet_route.hpp>
 #include <geometry_msgs/msg/twist.hpp>
@@ -83,6 +84,7 @@ namespace freespace_planner
 using autoware_auto_mapping_msgs::msg::HADMapBin;
 using autoware_auto_planning_msgs::msg::Mission;
 using autoware_auto_planning_msgs::msg::Trajectory;
+using autoware_auto_planning_msgs::msg::PlannerResult;
 using autoware_auto_planning_msgs::srv::GetTrajectory;
 using autoware_planning_msgs::msg::LaneletRoute;
 using freespace_planning_algorithms::AbstractPlanningAlgorithm;
@@ -122,7 +124,7 @@ struct NodeParam
   bool replan_when_course_out;
 };
 
-struct PlannerResult 
+struct Result 
 {
   enum class FailureReason {
     NONE,

@@ -683,9 +683,9 @@ void FreespacePlannerNode::HandlePlannerResult(const bool* result, const double*
   static double time_limit;
   static bool has_initialized = false;
   static bool has_filled_result = false;
-  static PlannerResult planner_result;
-  static rclcpp::Publisher<std_msgs::msg::Int16MultiArray>::SharedPtr planning_result_pub =
-      create_publisher<std_msgs::msg::Int16MultiArray>("~/output/planning_result", rclcpp::QoS{ 1 }.transient_local());
+  static Result planner_result;
+  static rclcpp::Publisher<PlannerResult>::SharedPtr planning_result_pub =
+      create_publisher<PlannerResult>("~/output/planning_result", rclcpp::QoS{ 1 }.reliable().transient_local());
 
   if (has_initialized)
   {
@@ -698,7 +698,7 @@ void FreespacePlannerNode::HandlePlannerResult(const bool* result, const double*
     if (!planner_result.is_success)
     {
       planner_result.failure_reason =
-          *cost_time > time_limit ? PlannerResult::FailureReason::TIME_OUT : PlannerResult::FailureReason::UNREACHABLE;
+          *cost_time > time_limit ? Result::FailureReason::TIME_OUT : Result::FailureReason::UNREACHABLE;
     }
     has_filled_result = true;
     return;
@@ -706,8 +706,11 @@ void FreespacePlannerNode::HandlePlannerResult(const bool* result, const double*
 
   if (has_filled_result)
   {
-    std_msgs::msg::Int16MultiArray msg;
-    msg.data = { planner_result.is_success, static_cast<int16_t>(planner_result.failure_reason) };
+    std_msgs::msg::Int16MultiArray result;
+    result.data = { planner_result.is_success, static_cast<int16_t>(planner_result.failure_reason) };
+    PlannerResult msg;
+    msg.planner_result = result;
+    msg.planner_trajectory = trajectory_;
     planning_result_pub->publish(msg);
     has_filled_result = false;
     return;

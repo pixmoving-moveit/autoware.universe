@@ -3,16 +3,19 @@
 
 #include "rclcpp/rclcpp.hpp"
 
+#include <motion_utils/motion_utils.hpp>
 #include <motion_utils/vehicle/vehicle_state_checker.hpp>
+#include <rclcpp/subscription.hpp>
 
+#include "autoware_auto_planning_msgs/msg/trajectory.hpp"
 #include <autoware_auto_planning_msgs/msg/mission.hpp>
+#include <autoware_auto_planning_msgs/msg/planner_result.hpp>
 #include <autoware_auto_vehicle_msgs/msg/engage.hpp>
 #include <autoware_auto_vehicle_msgs/msg/velocity_report.hpp>
 #include <autoware_planning_msgs/msg/lanelet_route.hpp>
 #include <geometry_msgs/msg/pose.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <std_msgs/msg/bool.hpp>
-#include <std_msgs/msg/int16_multi_array.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tier4_planning_msgs/msg/velocity_limit.hpp>
 
@@ -31,6 +34,8 @@ class State;
 class FreeSpacePlannerPreprocessorNode;
 
 using autoware_auto_planning_msgs::msg::Mission;
+using autoware_auto_planning_msgs::msg::PlannerResult;
+using autoware_auto_planning_msgs::msg::Trajectory;
 using autoware_auto_vehicle_msgs::msg::Engage;
 using autoware_auto_vehicle_msgs::msg::VelocityReport;
 using autoware_planning_msgs::msg::LaneletRoute;
@@ -50,7 +55,8 @@ struct ContextData
 
   Mission::ConstSharedPtr mission_ptr;
   LaneletRoute::ConstSharedPtr route_ptr;
-  Int16MultiArray::ConstSharedPtr plan_result_ptr;
+  Int16MultiArray::ConstSharedPtr result_ptr;
+  Trajectory::ConstSharedPtr trajectory_ptr;
   Bool::ConstSharedPtr parking_state_ptr;
 
   std::shared_ptr<State> state;
@@ -173,6 +179,16 @@ class Idle : public State
 {
 public:
   explicit Idle(FreeSpacePlannerPreprocessorNode * context) : State("Idle") { SetContext(context); }
+  void Handle() override{};
+};
+
+class Initialize : public State
+{
+public:
+  explicit Initialize(FreeSpacePlannerPreprocessorNode * context) : State("Initialize")
+  {
+    SetContext(context);
+  }
   void Handle() override;
 };
 
@@ -189,7 +205,7 @@ public:
 class WaitPlanResult : public State
 {
 private:
-  rclcpp::Subscription<Int16MultiArray>::SharedPtr plan_result_sub_;
+  rclcpp::Subscription<PlannerResult>::SharedPtr plan_result_sub_;
   void LoadSubscribers(FreeSpacePlannerPreprocessorNode * context);
 
 public:
@@ -204,6 +220,7 @@ public:
 class StartUp : public State
 {
 private:
+  bool HasSynchronizedTrajectory(Trajectory::ConstSharedPtr & trajectory);
   void LoadSubscribers(FreeSpacePlannerPreprocessorNode * context);
 
 public:
@@ -237,7 +254,6 @@ public:
   explicit FreeSpacePlannerPreprocessorNode(const rclcpp::NodeOptions & node_options);
   std::shared_ptr<State> CreateState(const std::string name);
   void SwitchTo(const std::string name);
-  void SwitchState();
   bool engage(bool button);
   bool SetVelocityLimit(double velocity);
   bool LoadStationInfo();
@@ -248,14 +264,15 @@ public:
   rclcpp::Publisher<Bool>::SharedPtr parking_state_pub_;
 
 private:
-  void Reset();
   void OnTimer();
   void OnMission(const Mission::ConstSharedPtr msg);
   void OnOdometry(const Odometry::ConstSharedPtr msg);
+  // void OnTrajectory(const Trajectory::ConstSharedPtr msg);
 
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp::Subscription<Mission>::SharedPtr mission_sub_;
   rclcpp::Subscription<Odometry>::SharedPtr odometry_sub_;
+  // rclcpp::Subscription<Trajectory>::SharedPtr trajectory_sub_;
 };
 /* *************************************************************************************************
  */

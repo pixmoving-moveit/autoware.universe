@@ -1,7 +1,4 @@
 #include <freespace_planner_preprocessor_node.hpp>
-
-#include <cstdint>
-
 namespace freespace_planner_preprocessor
 {
 void MessageForward::LoadSubscribers(FreeSpacePlannerPreprocessorNode* context)
@@ -9,7 +6,7 @@ void MessageForward::LoadSubscribers(FreeSpacePlannerPreprocessorNode* context)
   auto OnRoute = [context](const LaneletRoute::ConstSharedPtr msg) {
     if (context->data_base.mission_ptr && context->IsPendingMission(context->data_base.mission_ptr))
     {
-      // TODO: 被激活scenario_selector会通过该回调传入数据，一旦切换为中转模式时，会直接被转发出去
+      // TODO: 被激活scenario_selector会通过该回调传入数据，防止一旦切换为中转模式时，会直接被转发出去
       return;
     }
     context->data_base.route_ptr = msg;
@@ -17,7 +14,7 @@ void MessageForward::LoadSubscribers(FreeSpacePlannerPreprocessorNode* context)
   auto OnParkingState = [context](const Bool::ConstSharedPtr msg) {
     if (context->data_base.mission_ptr && context->IsPendingMission(context->data_base.mission_ptr))
     {
-      // 当mission是RELOADING或者DUMPING_TRASH时，其信息由其他状态来控制发布,不作中转
+      // 当mission是COVERAGE_SWEEPING,RELOADING或者DUMPING_TRASH时，其信息由其他状态来控制发布,不作中转
       return;
     }
     context->data_base.parking_state_ptr = msg;
@@ -42,23 +39,66 @@ void MessageForward::Handle()
   }
 }
 
-void Idle::Handle()
+void Initialize::Handle()
 {
   if (!context_->engage(false))
   {
     return;
   }
-  if (context_->data_base.mission_ptr->free_space_sweeping_mode == Mission::RELOADING ||
-      context_->data_base.mission_ptr->free_space_sweeping_mode == Mission::DUMPING_TRASH)
+
+  // 重置参数
+  std_msgs::msg::Bool msg;
+  msg.data = false;
+  context_->parking_state_pub_->publish(msg);
+
+  if (!context_->IsPendingMission(context_->data_base.mission_ptr))
   {
-    std_msgs::msg::Bool msg;
-    msg.data = false;
-    context_->parking_state_pub_->publish(msg);
-    context_->SwitchTo("ModifyGoalPose");
-  }
-  else
-  {
+    context_->SetVelocityLimit(20.0);
     context_->SwitchTo("MessageForward");
+    return;
+  }
+
+  // TODO：创建临时发布者,将route的终点位置发给scenario_selector，让它进入freespace的场景
+  auto tmp_pub =
+      context_->create_publisher<LaneletRoute>("/planning/mission_planning/route", rclcpp::QoS{ 1 }.transient_local());
+
+  if (context_->data_base.mission_ptr->free_space_sweeping_mode == Mission::COVERAGE_SWEEPING)
+  {
+    LaneletRoute route;
+    route.goal_pose = context_->data_base.sweeping_destination;
+    tmp_pub->publish(route);
+
+    context_->route_pub_->publish(route);
+    context_->SwitchTo("MessageForward");
+    return;
+  }
+
+  if (context_->data_base.mission_ptr->free_space_sweeping_mode == Mission::RELOADING)
+  {
+    LaneletRoute route;
+    route.goal_pose = context_->data_base.supply_station;
+    tmp_pub->publish(route);
+
+    context_->data_base.goal_type = GoalType::Preset;
+    context_->data_base.station = context_->data_base.supply_station;
+    context_->data_base.preset_points = context_->data_base.preset_points_of_supply_station;
+    context_->data_base.index_of_preset_point = 0;
+    context_->SwitchTo("ModifyGoalPose");
+    return;
+  }
+
+  if (context_->data_base.mission_ptr->free_space_sweeping_mode == Mission::DUMPING_TRASH)
+  {
+    LaneletRoute route;
+    route.goal_pose = context_->data_base.garbage_dump;
+    tmp_pub->publish(route);
+
+    context_->data_base.goal_type = GoalType::Preset;
+    context_->data_base.station = context_->data_base.garbage_dump;
+    context_->data_base.preset_points = context_->data_base.preset_points_of_garbage_dump;
+    context_->data_base.index_of_preset_point = 0;
+    context_->SwitchTo("ModifyGoalPose");
+    return;
   }
 }
 
@@ -81,26 +121,36 @@ void ModifyGoalPose::Handle()
 
 void WaitPlanResult::LoadSubscribers(FreeSpacePlannerPreprocessorNode* context)
 {
-  auto callback = [context](const Int16MultiArray::ConstSharedPtr msg) { context->data_base.plan_result_ptr = msg; };
-  plan_result_sub_ = context->create_subscription<Int16MultiArray>(
+  auto callback = [context](const PlannerResult::ConstSharedPtr msg) {
+    if (context->data_base.mission_ptr && !context->IsPendingMission(context->data_base.mission_ptr))
+    {
+      // 当处在消息中转的时候重置，否则从一旦切换为其他任务的时候，会出现继续跟踪之前的轨迹
+      context->data_base.result_ptr = nullptr;
+      context->data_base.trajectory_ptr = nullptr;
+      return;
+    }
+    context->data_base.result_ptr = std::make_shared<Int16MultiArray>(msg->planner_result);
+    context->data_base.trajectory_ptr = std::make_shared<Trajectory>(msg->planner_trajectory);
+  };
+  plan_result_sub_ = context->create_subscription<PlannerResult>(
       "~/input/planning_result", rclcpp::QoS{ 1 }.reliable().transient_local(), callback);
 }
 
 void WaitPlanResult::Handle()
 {
-  if (context_->data_base.plan_result_ptr)
+  if (context_->data_base.result_ptr)
   {
-    if (context_->data_base.plan_result_ptr->data[0] == 1)
+    if (context_->data_base.result_ptr->data[0] == 1)
     {
-      context_->data_base.plan_result_ptr = nullptr;
+      context_->data_base.result_ptr = nullptr;
       context_->data_base.plan_count = 0;
       context_->SwitchTo("StartUp");
       return;
     }
-    if (context_->data_base.plan_result_ptr->data[1] == 1)
+    if (context_->data_base.result_ptr->data[1] == 1)
     {
       // 规划超时,每个点试2次，不行换下一个
-      context_->data_base.plan_result_ptr = nullptr;
+      context_->data_base.result_ptr = nullptr;
       if (++context_->data_base.plan_count >= 2)
       {
         // 失败超过2次
@@ -126,10 +176,10 @@ void WaitPlanResult::Handle()
       return;
     }
 
-    if (context_->data_base.plan_result_ptr->data[1] == 2)
+    if (context_->data_base.result_ptr->data[1] == 2)
     {
       // 完全堵死，直接换另一个点试
-      context_->data_base.plan_result_ptr = nullptr;
+      context_->data_base.result_ptr = nullptr;
       context_->data_base.plan_count = 0;
       context_->data_base.index_of_preset_point++;
       if (context_->data_base.index_of_preset_point >= (context_->data_base.preset_points.size()))
@@ -151,16 +201,37 @@ void WaitPlanResult::Handle()
   }
 }
 
+bool StartUp::HasSynchronizedTrajectory(Trajectory::ConstSharedPtr& trajectory_ptr)
+{
+  static Trajectory::ConstSharedPtr executor_trajectory_ptr;
+  static auto trajectory_sub = context_->create_subscription<Trajectory>(
+      "/planning/scenario_planning/trajectory", rclcpp::QoS{ 1 }.reliable().durability_volatile(),
+      [&](const Trajectory::ConstSharedPtr msg) { executor_trajectory_ptr = msg; });
+  if (executor_trajectory_ptr)
+  {
+    const size_t nearest_idx =
+        motion_utils::findNearestIndex(trajectory_ptr->points, executor_trajectory_ptr->points.back().pose.position);
+    double dist =
+        Calculate2dDistance(executor_trajectory_ptr->points.back().pose, trajectory_ptr->points.at(nearest_idx).pose);
+    if (dist < 0.5)
+      return true;
+  }
+  return false;
+}
+
 void StartUp::Handle()
 {
-  bool has_recieved_trajctory = true;
-  // 设置车速，当车速设置生效后，再启动
-  bool has_set_successfully = context_->data_base.goal_type == GoalType::Preset ? context_->SetVelocityLimit(1.0) :
-                                                                                  context_->SetVelocityLimit(0.3);
-  bool has_started = context_->engage(true);
-  if (has_recieved_trajctory && has_set_successfully && has_started)
+  if (HasSynchronizedTrajectory(context_->data_base.trajectory_ptr))
   {
-    context_->SwitchTo("WaitForArrived");
+    // 先保证轨迹数据接收同步，防止车辆启动之后还在跟踪上一次的轨迹
+    bool has_set_successfully = context_->data_base.goal_type == GoalType::Preset ? context_->SetVelocityLimit(1.0) :
+                                                                                    context_->SetVelocityLimit(0.3);
+    bool has_started = context_->engage(true);
+    if (has_set_successfully && has_started)
+    {
+      // 设置车速，当车速设置生效后，再启动
+      context_->SwitchTo("WaitForArrived");
+    }
   }
 }
 
@@ -285,6 +356,10 @@ std::shared_ptr<State> FreeSpacePlannerPreprocessorNode::CreateState(const std::
   {
     new_state = std::make_shared<Idle>(this);
   }
+  else if (name == "Initialize")
+  {
+    new_state = std::make_shared<Initialize>(this);
+  }
   else if (name == "ModifyGoalPose")
   {
     new_state = std::make_shared<ModifyGoalPose>(this);
@@ -321,65 +396,6 @@ void FreeSpacePlannerPreprocessorNode::SwitchTo(const std::string name)
   data_base.state = (it != data_base.state_map.end()) ? it->second : CreateState(name);
   RCLCPP_INFO(get_logger(), "switch state: %s -> %s",
               data_base.prev_state ? data_base.prev_state->name().c_str() : "None", data_base.state->name().c_str());
-}
-
-void FreeSpacePlannerPreprocessorNode::SwitchState()
-{
-  if (!IsPendingMission(data_base.mission_ptr))
-  {
-    SwitchTo("MessageForward");
-    return;
-  }
-
-  // TODO：创建临时发布者,发布话题给激活scenario_selector
-  auto tmp_pub = create_publisher<LaneletRoute>("/planning/mission_planning/route", rclcpp::QoS{ 1 }.transient_local());
-
-  if (data_base.mission_ptr->free_space_sweeping_mode == Mission::COVERAGE_SWEEPING)
-  {
-    // TODO: 激活scenario_selector的route_，让它进入freespace的场景
-    {
-      LaneletRoute route;
-      route.goal_pose = data_base.sweeping_destination;
-      tmp_pub->publish(route);
-      route_pub_->publish(route);
-    }
-    SwitchTo("Idle");
-    return;
-  }
-
-  if (data_base.mission_ptr->free_space_sweeping_mode == Mission::RELOADING)
-  {
-    // TODO: 激活scenario_selector的route_，让它进入freespace的场景
-    {
-      LaneletRoute route;
-      route.goal_pose = data_base.supply_station;
-      tmp_pub->publish(route);
-    }
-    Reset();
-    data_base.station = data_base.supply_station;
-    data_base.preset_points = data_base.preset_points_of_supply_station;
-    data_base.goal_type = GoalType::Preset;
-    data_base.index_of_preset_point = 0;
-    SwitchTo("Idle");
-    return;
-  }
-
-  if (data_base.mission_ptr->free_space_sweeping_mode == Mission::DUMPING_TRASH)
-  {
-    {
-      // TODO: 激活scenario_selector的route_，让它进入freespace的场景
-      LaneletRoute route;
-      route.goal_pose = data_base.garbage_dump;
-      tmp_pub->publish(route);
-    }
-    Reset();
-    data_base.station = data_base.garbage_dump;
-    data_base.preset_points = data_base.preset_points_of_garbage_dump;
-    data_base.goal_type = GoalType::Preset;
-    data_base.index_of_preset_point = 0;
-    SwitchTo("Idle");
-    return;
-  }
 }
 
 bool FreeSpacePlannerPreprocessorNode::engage(bool button)
@@ -518,19 +534,11 @@ bool FreeSpacePlannerPreprocessorNode::IsPendingMission(Mission::ConstSharedPtr&
   return false;
 }
 
-void FreeSpacePlannerPreprocessorNode::Reset()
-{
-  std_msgs::msg::Bool msg;
-  msg.data = false;
-  parking_state_pub_->publish(msg);
-  engage(false);
-}
-
 void FreeSpacePlannerPreprocessorNode::OnTimer()
 {
   if (data_base.has_new_mission)
   {
-    SwitchState();
+    SwitchTo("Initialize");
     data_base.has_new_mission = false;
   }
   data_base.state->Handle();
