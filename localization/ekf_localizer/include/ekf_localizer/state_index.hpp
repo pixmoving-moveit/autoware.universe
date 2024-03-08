@@ -22,6 +22,7 @@ enum IDX {
   YAWB = 3,
   VX = 4,
   WZ = 5,
+  BETA = 6, // slip angle
 };
 
 #endif  // EKF_LOCALIZER__STATE_INDEX_HPP_

@@ -32,7 +32,7 @@ TEST(PredictNextState, PredictNextState)
 {
   // This function is the definition of state transition so we just check
   // if the calculation is done according to the formula
-  Vector6d X_curr;
+  Vector7d X_curr;
   X_curr(0) = 2.;
   X_curr(1) = 3.;
   X_curr(2) = M_PI / 2.;
@@ -42,7 +42,7 @@ TEST(PredictNextState, PredictNextState)
 
   const double dt = 0.5;
 
-  const Vector6d X_next = predictNextState(X_curr, dt);
+  const Vector7d X_next = predictNextState(X_curr, dt);
 
   const double tolerance = 1e-10;
   EXPECT_NEAR(X_next(0), 2. + 10. * std::cos(M_PI / 2. + M_PI / 4.) * 0.5, tolerance);
@@ -61,11 +61,11 @@ TEST(CreateStateTransitionMatrix, NumericalApproximation)
   {
     // check around x = 0
     const double dt = 0.1;
-    const Vector6d dx = 0.1 * Vector6d::Ones();
-    const Vector6d x = Vector6d::Zero();
+    const Vector7d dx = 0.1 * Vector7d::Ones();
+    const Vector7d x = Vector7d::Zero();
 
-    const Matrix6d A = createStateTransitionMatrix(x, dt);
-    const Vector6d df = predictNextState(x + dx, dt) - predictNextState(x, dt);
+    const Matrix7d A = createStateTransitionMatrix(x, dt);
+    const Vector7d df = predictNextState(x + dx, dt) - predictNextState(x, dt);
 
     EXPECT_LT((df - A * dx).norm(), 2e-3);
   }
@@ -73,11 +73,11 @@ TEST(CreateStateTransitionMatrix, NumericalApproximation)
   {
     // check around random x
     const double dt = 0.1;
-    const Vector6d dx = 0.1 * Vector6d::Ones();
-    const Vector6d x = (Vector6d() << 0.1, 0.2, 0.1, 0.4, 0.1, 0.3).finished();
+    const Vector7d dx = 0.1 * Vector7d::Ones();
+    const Vector7d x = (Vector7d() << 0.1, 0.2, 0.1, 0.4, 0.1, 0.3).finished();
 
-    const Matrix6d A = createStateTransitionMatrix(x, dt);
-    const Vector6d df = predictNextState(x + dx, dt) - predictNextState(x, dt);
+    const Matrix7d A = createStateTransitionMatrix(x, dt);
+    const Vector7d df = predictNextState(x + dx, dt) - predictNextState(x, dt);
 
     EXPECT_LT((df - A * dx).norm(), 5e-3);
   }
@@ -85,7 +85,7 @@ TEST(CreateStateTransitionMatrix, NumericalApproximation)
 
 TEST(ProcessNoiseCovariance, ProcessNoiseCovariance)
 {
-  const Matrix6d Q = processNoiseCovariance(1., 2., 3.);
+  const Matrix7d Q = processNoiseCovariance(1., 2., 3.);
   EXPECT_EQ(Q(2, 2), 1.);  // for yaw
   EXPECT_EQ(Q(4, 4), 2.);  // for vx
   EXPECT_EQ(Q(5, 5), 3.);  // for wz

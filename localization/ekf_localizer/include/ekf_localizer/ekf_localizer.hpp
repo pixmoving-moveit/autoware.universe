@@ -31,6 +31,7 @@
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
+#include <geometry_msgs/msg/vector3_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 #include <tier4_debug_msgs/msg/float64_multi_array_stamped.hpp>
@@ -133,6 +134,8 @@ private:
   //!< @brief measurement twist with covariance subscriber
   rclcpp::Subscription<geometry_msgs::msg::TwistWithCovarianceStamped>::SharedPtr
     sub_twist_with_cov_;
+  //!< @brief slip angle subscriber
+  rclcpp::Subscription<geometry_msgs::msg::Vector3Stamped>::SharedPtr sub_slip_angle_;
   //!< @brief time for ekf calculation callback
   rclcpp::TimerBase::SharedPtr timer_control_;
   //!< @brief last predict time
@@ -169,6 +172,7 @@ private:
 
   AgedObjectQueue<geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr> pose_queue_;
   AgedObjectQueue<geometry_msgs::msg::TwistWithCovarianceStamped::SharedPtr> twist_queue_;
+  AgedObjectQueue<geometry_msgs::msg::Vector3Stamped::SharedPtr> slip_angle_queue_;
 
   geometry_msgs::msg::PoseStamped current_ekf_pose_;  //!< @brief current estimated pose
   geometry_msgs::msg::PoseStamped
@@ -203,6 +207,11 @@ private:
   void callbackInitialPose(geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg);
 
   /**
+   * @brief set slip angle measurement
+   */
+  void callbackSlipAngle(geometry_msgs::msg::Vector3Stamped::SharedPtr msg);
+
+  /**
    * @brief initialization of EKF
    */
   void initEKF();
@@ -229,6 +238,11 @@ private:
    */
   void measurementUpdateTwist(const geometry_msgs::msg::TwistWithCovarianceStamped & twist);
 
+  /**
+   * @brief compute EKF update with slip angle measurement
+   * @param slip_angle measurement value of slip angle
+   */
+  void measurementUpdateSlipAngle(const geometry_msgs::msg::Vector3Stamped & slip_angle);
   /**
    * @brief get transform from frame_id
    */

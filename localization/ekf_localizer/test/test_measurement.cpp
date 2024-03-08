@@ -18,16 +18,16 @@
 
 TEST(Measurement, PoseMeasurementMatrix)
 {
-  const Eigen::Matrix<double, 3, 6> M = poseMeasurementMatrix();
-  Eigen::Matrix<double, 3, 6> expected;
+  const Eigen::Matrix<double, 3, 7> M = poseMeasurementMatrix();
+  Eigen::Matrix<double, 3, 7> expected;
   expected << 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0;
   EXPECT_EQ((M - expected).norm(), 0);
 }
 
 TEST(Measurement, TwistMeasurementMatrix)
 {
-  const Eigen::Matrix<double, 2, 6> M = twistMeasurementMatrix();
-  Eigen::Matrix<double, 2, 6> expected;
+  const Eigen::Matrix<double, 2, 7> M = twistMeasurementMatrix();
+  Eigen::Matrix<double, 2, 7> expected;
   expected << 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1;
   EXPECT_EQ((M - expected).norm(), 0);
 }

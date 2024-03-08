@@ -37,6 +37,9 @@ public:
     twist_additional_delay(node->declare_parameter("twist_additional_delay", 0.0)),
     twist_gate_dist(node->declare_parameter("twist_gate_dist", 10000.0)),
     twist_smoothing_steps(node->declare_parameter("twist_smoothing_steps", 2)),
+    slip_angle_additional_delay(node->declare_parameter("slip_angle_additional_delay", 0.0)),
+    slip_angle_gate_dist(node->declare_parameter("slip_angle_gate_dist", 10000.0)),
+    slip_angle_smoothing_steps(node->declare_parameter("slip_angle_smoothing_steps", 2)),
     proc_stddev_vx_c(node->declare_parameter("proc_stddev_vx_c", 5.0)),
     proc_stddev_wz_c(node->declare_parameter("proc_stddev_wz_c", 1.0)),
     proc_stddev_yaw_c(node->declare_parameter("proc_stddev_yaw_c", 0.005))
@@ -56,6 +59,9 @@ public:
   const double twist_additional_delay;
   const double twist_gate_dist;
   const int twist_smoothing_steps;
+  const double slip_angle_additional_delay;
+  const double slip_angle_gate_dist;
+  const int slip_angle_smoothing_steps;
   const double proc_stddev_vx_c;   //!< @brief  vx process noise
   const double proc_stddev_wz_c;   //!< @brief  wz process noise
   const double proc_stddev_yaw_c;  //!< @brief  yaw process noise

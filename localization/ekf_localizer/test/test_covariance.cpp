@@ -19,7 +19,7 @@
 TEST(EKFCovarianceToPoseMessageCovariance, SmokeTest)
 {
   {
-    Matrix6d P = Matrix6d::Zero();
+    Matrix6d P = Matrix7d::Zero();
     P(0, 0) = 1.;
     P(0, 1) = 2.;
     P(0, 2) = 3.;
@@ -44,7 +44,7 @@ TEST(EKFCovarianceToPoseMessageCovariance, SmokeTest)
 
   // ensure other elements are zero
   {
-    Matrix6d P = Matrix6d::Zero();
+    Matrix6d P = Matrix7d::Zero();
     std::array<double, 36> covariance = ekfCovarianceToPoseMessageCovariance(P);
     for (double e : covariance) {
       EXPECT_EQ(e, 0.);
@@ -55,7 +55,7 @@ TEST(EKFCovarianceToPoseMessageCovariance, SmokeTest)
 TEST(EKFCovarianceToTwistMessageCovariance, SmokeTest)
 {
   {
-    Matrix6d P = Matrix6d::Zero();
+    Matrix6d P = Matrix7d::Zero();
     P(4, 4) = 1.;
     P(4, 5) = 2.;
     P(5, 4) = 3.;
@@ -70,7 +70,7 @@ TEST(EKFCovarianceToTwistMessageCovariance, SmokeTest)
 
   // ensure other elements are zero
   {
-    Matrix6d P = Matrix6d::Zero();
+    Matrix6d P = Matrix7d::Zero();
     std::array<double, 36> covariance = ekfCovarianceToTwistMessageCovariance(P);
     for (double e : covariance) {
       EXPECT_EQ(e, 0.);

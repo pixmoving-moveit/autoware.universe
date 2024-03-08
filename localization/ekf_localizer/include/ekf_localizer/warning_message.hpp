@@ -21,8 +21,11 @@ std::string poseDelayStepWarningMessage(
   const double delay_time, const int extend_state_step, const double ekf_dt);
 std::string twistDelayStepWarningMessage(
   const double delay_time, const int extend_state_step, const double ekf_dt);
+std::string slipAngleDelayStepWarningMessage(
+  const double delay_time, const int extend_state_step, const double ekf_dt);
 std::string poseDelayTimeWarningMessage(const double delay_time);
 std::string twistDelayTimeWarningMessage(const double delay_time);
+std::string slipAngleDelayTimeWarningMessage(const double delay_time);
 std::string mahalanobisWarningMessage(const double distance, const double max_distance);
 
 #endif  // EKF_LOCALIZER__WARNING_MESSAGE_HPP_

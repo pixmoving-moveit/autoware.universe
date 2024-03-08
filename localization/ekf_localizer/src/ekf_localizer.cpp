@@ -56,9 +56,10 @@ EKFLocalizer::EKFLocalizer(const std::string & node_name, const rclcpp::NodeOpti
   params_(this),
   ekf_rate_(params_.ekf_rate),
   ekf_dt_(params_.ekf_dt),
-  dim_x_(6 /* x, y, yaw, yaw_bias, vx, wz */),
+  dim_x_(7 /* x, y, yaw, yaw_bias, vx, wz, beta */),
   pose_queue_(params_.pose_smoothing_steps),
-  twist_queue_(params_.twist_smoothing_steps)
+  twist_queue_(params_.twist_smoothing_steps),
+  slip_angle_queue_(params_.slip_angle_smoothing_steps)
 {
   /* convert to continuous to discrete */
   proc_cov_vx_d_ = std::pow(params_.proc_stddev_vx_c * ekf_dt_, 2.0);
@@ -93,6 +94,8 @@ EKFLocalizer::EKFLocalizer(const std::string & node_name, const rclcpp::NodeOpti
     "in_pose_with_covariance", 1, std::bind(&EKFLocalizer::callbackPoseWithCovariance, this, _1));
   sub_twist_with_cov_ = create_subscription<geometry_msgs::msg::TwistWithCovarianceStamped>(
     "in_twist_with_covariance", 1, std::bind(&EKFLocalizer::callbackTwistWithCovariance, this, _1));
+  sub_slip_angle_ = create_subscription<geometry_msgs::msg::Vector3Stamped>(
+    "in_slip_angle", 1, std::bind(&EKFLocalizer::callbackSlipAngle, this, _1));
   service_trigger_node_ = create_service<std_srvs::srv::SetBool>(
     "trigger_node_srv",
     std::bind(
@@ -162,9 +165,9 @@ void EKFLocalizer::timerCallback()
 
   const double dt = ekf_dt_;
 
-  const Vector6d X_next = predictNextState(X_curr, dt);
-  const Matrix6d A = createStateTransitionMatrix(X_curr, dt);
-  const Matrix6d Q = processNoiseCovariance(proc_cov_yaw_d_, proc_cov_vx_d_, proc_cov_wz_d_);
+  const Vector7d X_next = predictNextState(X_curr, dt);
+  const Matrix7d A = createStateTransitionMatrix(X_curr, dt);
+  const Matrix7d Q = processNoiseCovariance(proc_cov_yaw_d_, proc_cov_vx_d_, proc_cov_wz_d_);
 
   ekf_.predictWithDelay(X_next, A, Q);
 
@@ -203,6 +206,21 @@ void EKFLocalizer::timerCallback()
     }
     DEBUG_INFO(get_logger(), "[EKF] measurementUpdateTwist calc time = %f [ms]", stop_watch_.toc());
     DEBUG_INFO(get_logger(), "------------------------- end Twist -------------------------\n");
+  }
+
+  /* slip angle measurement update */
+  if (!slip_angle_queue_.empty()) {
+    DEBUG_INFO(get_logger(), "------------------------- start Slip Angle -------------------------");
+    stop_watch_.tic();
+
+    // save the initial size because the queue size can change in the loop
+    const size_t n = slip_angle_queue_.size();
+    for (size_t i = 0; i < n; ++i) {
+      const auto slip_angle = slip_angle_queue_.pop_increment_age();
+      measurementUpdateSlipAngle(*slip_angle);
+    }
+    DEBUG_INFO(get_logger(), "[EKF] measurementUpdateSlipAngle calc time = %f [ms]", stop_watch_.toc());
+    DEBUG_INFO(get_logger(), "------------------------- end Slip Angle -------------------------\n");
   }
 
   const double x = ekf_.getXelement(IDX::X);
@@ -317,6 +335,7 @@ void EKFLocalizer::callbackInitialPose(
   X(IDX::YAWB) = 0.0;
   X(IDX::VX) = 0.0;
   X(IDX::WZ) = 0.0;
+  X(IDX::BETA) = 0.0;
 
   using COV_IDX = tier4_autoware_utils::xyzrpy_covariance_index::XYZRPY_COV_IDX;
   P(IDX::X, IDX::X) = initialpose->pose.covariance[COV_IDX::X_X];
@@ -328,6 +347,7 @@ void EKFLocalizer::callbackInitialPose(
   }
   P(IDX::VX, IDX::VX) = 0.01;
   P(IDX::WZ, IDX::WZ) = 0.01;
+  P(IDX::BETA, IDX::BETA) = 0.01;
 
   ekf_.init(X, P, params_.extend_state_step);
 
@@ -358,6 +378,12 @@ void EKFLocalizer::callbackTwistWithCovariance(
   twist_queue_.push(msg);
 }
 
+void EKFLocalizer::callbackSlipAngle(geometry_msgs::msg::Vector3Stamped::SharedPtr msg)
+{
+  // if (!is_activated_) return;
+  slip_angle_queue_.push(msg);
+}
+
 /*
  * initEKF
  */
@@ -371,6 +397,7 @@ void EKFLocalizer::initEKF()
   }
   P(IDX::VX, IDX::VX) = 1000.0;  // for vx
   P(IDX::WZ, IDX::WZ) = 50.0;    // for wz
+  P(IDX::BETA, IDX::BETA) = 50.0; // for slip angle
 
   ekf_.init(X, P, params_.extend_state_step);
 }
@@ -443,7 +470,7 @@ void EKFLocalizer::measurementUpdatePose(const geometry_msgs::msg::PoseWithCovar
   DEBUG_PRINT_MAT(y_ekf.transpose());
   DEBUG_PRINT_MAT((y - y_ekf).transpose());
 
-  const Eigen::Matrix<double, 3, 6> C = poseMeasurementMatrix();
+  const Eigen::Matrix<double, 3, 7> C = poseMeasurementMatrix();
   const Eigen::Matrix3d R =
     poseMeasurementCovariance(pose.pose.covariance, params_.pose_smoothing_steps);
 
@@ -515,16 +542,74 @@ void EKFLocalizer::measurementUpdateTwist(
   DEBUG_PRINT_MAT(y_ekf.transpose());
   DEBUG_PRINT_MAT((y - y_ekf).transpose());
 
-  const Eigen::Matrix<double, 2, 6> C = twistMeasurementMatrix();
+  const Eigen::Matrix<double, 2, 7> C = twistMeasurementMatrix();
   const Eigen::Matrix2d R =
     twistMeasurementCovariance(twist.twist.covariance, params_.twist_smoothing_steps);
 
   ekf_.updateWithDelay(y, C, R, delay_step);
+}
 
-  // debug
-  const Eigen::MatrixXd X_result = ekf_.getLatestX();
-  DEBUG_PRINT_MAT(X_result.transpose());
-  DEBUG_PRINT_MAT((X_result - X_curr).transpose());
+/**
+ * @brief measurement slip angle
+ * 
+ */
+void EKFLocalizer::measurementUpdateSlipAngle(
+  const geometry_msgs::msg::Vector3Stamped & slip_angle)
+{
+  const Eigen::MatrixXd X_curr = ekf_.getLatestX();
+  DEBUG_PRINT_MAT(X_curr.transpose());
+
+  constexpr int dim_y = 1;  // slip angle
+  const rclcpp::Time t_curr = this->now();
+
+  /* Calculate delay step */
+  double delay_time = (t_curr - slip_angle.header.stamp).seconds() + params_.slip_angle_additional_delay;
+  if (delay_time < 0.0) {
+    warning_.warnThrottle(slipAngleDelayTimeWarningMessage(delay_time), 1000);
+  }
+  delay_time = std::max(delay_time, 0.0);
+
+  int delay_step = std::roundf(delay_time / ekf_dt_);
+  if (delay_step >= params_.extend_state_step) {
+    warning_.warnThrottle(
+      slipAngleDelayStepWarningMessage(delay_time, params_.extend_state_step, ekf_dt_), 2000);
+    return;
+  }
+  DEBUG_INFO(get_logger(), "delay_time: %f [s]", delay_time);
+
+  /* Set measurement matrix */
+  Eigen::MatrixXd y(dim_y, 1);
+  double beta = slip_angle.vector.z;
+  y << beta;
+
+  if (hasNan(y) || hasInf(y)) {
+    warning_.warn(
+      "[EKF] slip angle measurement matrix includes NaN of Inf. ignore update. check twist message.");
+    return;
+  }
+
+  const Eigen::Matrix<double, 1, 1> y_ekf(
+    ekf_.getXelement(delay_step * dim_x_ + IDX::BETA));
+  const Eigen::MatrixXd P_curr = ekf_.getLatestP();
+  const Eigen::MatrixXd P_y = P_curr.block(6, 6, dim_y, dim_y);
+
+  const double distance = mahalanobis(y_ekf, y, P_y);
+  if (distance > params_.slip_angle_gate_dist) {
+    warning_.warnThrottle(mahalanobisWarningMessage(distance, params_.slip_angle_gate_dist), 2000);
+    warning_.warnThrottle("Ignore the measurement data.", 2000);
+    return;
+  }
+
+  DEBUG_PRINT_MAT(y.transpose());
+  DEBUG_PRINT_MAT(y_ekf.transpose());
+  DEBUG_PRINT_MAT((y - y_ekf).transpose());
+
+  const Eigen::Matrix<double, 1, 7> C = slipAngleMeasurementMatrix();
+  const Eigen::Matrix<double, 1, 1> R =
+    slipAngleMeasurementCovariance(params_.slip_angle_smoothing_steps);
+
+  ekf_.updateWithDelay(y, C, R, delay_step);
+
 }
 
 /*
@@ -642,6 +727,7 @@ void EKFLocalizer::serviceTriggerNode(
   if (req->data) {
     pose_queue_.clear();
     twist_queue_.clear();
+    slip_angle_queue_.clear();
     is_activated_ = true;
   } else {
     is_activated_ = false;

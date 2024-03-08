@@ -7,6 +7,7 @@
   <!-- input topic name -->
   <arg name="input_pose_with_cov_name" default="in_pose_with_covariance"/>
   <arg name="input_twist_with_cov_name" default="in_twist_with_covariance"/>
+  <arg name="input_slip_angle_name" default="in_slip_angle"/>
 
   <!-- output topic name -->
   <arg name="output_odom_name" default="ekf_odom"/>
@@ -21,6 +22,7 @@
     <remap from="in_pose_with_covariance" to="$(var input_pose_with_cov_name)"/>
 
     <remap from="in_twist_with_covariance" to="$(var input_twist_with_cov_name)"/>
+    <remap from="in_slip_angle" to="$(var input_slip_angle_name)"/>
 
     <remap from="initialpose" to="$(var input_initial_pose_name)"/>
     <remap from="trigger_node_srv" to="$(var input_trigger_node_service_name)"/>

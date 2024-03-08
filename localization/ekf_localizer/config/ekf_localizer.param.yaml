@@ -17,6 +17,11 @@
     twist_smoothing_steps: 2
     twist_gate_dist: 10000.0
 
+    # for slip angle measurement
+    slip_angle_additional_delay: 0.0
+    slip_angle_smoothing_steps: 1
+    slip_angle_gate_dist: 10000.0
+
     # for process model
     proc_stddev_yaw_c: 0.005
     proc_stddev_vx_c: 10.0

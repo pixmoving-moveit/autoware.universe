@@ -17,7 +17,7 @@
 
 #include "ekf_localizer/matrix_types.hpp"
 
-std::array<double, 36> ekfCovarianceToPoseMessageCovariance(const Matrix6d & P);
-std::array<double, 36> ekfCovarianceToTwistMessageCovariance(const Matrix6d & P);
+std::array<double, 36> ekfCovarianceToPoseMessageCovariance(const Matrix7d & P);
+std::array<double, 36> ekfCovarianceToTwistMessageCovariance(const Matrix7d & P);
 
 #endif  // EKF_LOCALIZER__COVARIANCE_HPP_
